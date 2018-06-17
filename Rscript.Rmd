@@ -1,0 +1,284 @@
+---
+title: "Great Reed Warbler alarm call attracts brood parasites"
+author: "Attila Marton, Attila Fülöp, Csaba Moskát, Miklós Bán"
+date: '2018 június 7 '
+output: html_document
+---
+
+Files:
+
+DFx2b.csv contains  (1) great reed warbler (Acrocephalus arundinaceus, GRW from hereafter) nest checking data from 2013, 2014 and 2018, 
+                    (2) great reed warbler nest characteristics from 2018
+                    (3) male and female great reed warbler alarm call intensity data to observer and to dummy plastic cuckoo from 2018
+                    (4) male and female common cuckoo (Cuculus canorus CC from hereafter) reactions to GRW alarm call from 2018. All experiment were performed near Apaj village, central Hungary.
+                    
+- Columns:
+-- nestid: a concatenated id showing the number of given nest in given year and the year
+-- id: the id number of given nest within given year
+-- year: the year of the study
+-- date: format yyyy.mm.dd
+-- site: name of channel (Arapaszto, Apaj, DVCS, Kunszentmiklos)
+-- grw.eggs: number of great reed warbler eggs at the time of visit
+-- cc.eggs: number of common cuckoo eggs at the time of visit
+-- total.eggs: grw.eggs + cc.eggs
+-- pull: 1 if chicks hatched at the time of visit
+-- abandoned: 1 if nest was deemed abandoned at the time of visit
+-- laying.date: the presumed laying date of the first egg
+-- observer: initials of observers
+-- exp: 0 = nest checking, 1 = small clutch, 2 = full clutch, 3 = drone flight
+-- boots.grwm: male GRW response to man in boots (0 = none, 1 = weak alarm call, 2 = strong alarm call)
+-- boots.grwf: female GRW response to man in boots (0 = none, 1 = weak alarm call, 2 = strong alarm call)
+-- playback.grwm: male GRW response to plastic cuckoo dummy during GRW alarm call playback (0 = none, 1 = weak alarm call, 2 = strong alarm call, 3 = contact fight)
+-- playback.grwf: female GRW response to plastic cuckoo dummy during GRW alarm call playback (0 = none, 1 = weak alarm call, 2 = strong alarm call, 3 = contact fight)
+-- before.ccm: male CC presence near the nest before GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- before.ccf: female CC presence near the nest before GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- during.ccm: male CC reaction near the nest to GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- during.ccf: female CC reaction near the nest to GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- after.ccm: male CC reaction near the nest after GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- after.ccf: female CC reaction near the nest after GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- pamela: 1 if dummy plastic cuckoo was used
+-- alarm.file: the name of the alarm file used
+-- record: if GRW reaction was recorded or not
+-- obs: any observation related to the nest visit
+-- nest.height: the height of the nest in cm
+-- nest.width: the width of the nest at the top in cm
+-- dist.water: distance of nest from water in cm
+-- dist.bank: distance of nest from the bank in cm
+-- above.water: distance between water and the top of the nest in cm
+-- above.nest: distance from the top of the nest and the top of the vegetation in cm
+-- visibility: direct nest view (DNV), indirect nest view (INV), no nest view (NNW) from the nest to the nearest perching tree
+-- perch.dist: distance in m to the nearest perching tree
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library setup}
+library(chron)
+library(doBy)
+library(rptR)
+library(beepr)
+library(Matrix)
+library(lme4)
+#library(nlme)
+#library(ordinal)
+#library(car)
+#library(rgdal)
+#library(geosphere)
+```
+
+```{r dataset and variable setup, echo=TRUE}
+
+setwd("C:/Users/Marton Attila/OneDrive/PhD/1. GRW alarm vs CC parasitism/2018")
+
+df <- read.csv("DFx2b.csv", header = T, sep = ";")
+summary(df)
+
+# converting nestid, year, site and observer to factor
+df$nestid <- as.factor(df$nestid)
+df$year <- as.factor(df$year)
+df$site <- as.factor(df$site)
+df$observer <- as.factor(df$observer)
+
+# converting date to julian date in column j.date using pachage chron 
+df$date <- as.Date(df$date, format = '%Y.%m.%d')
+df$j.date[df$year == "2013"] <- julian(df$date[df$year == "2013"], origin = as.Date("2013-01-01"), units = "days")
+df$j.date[df$year == "2014"] <- julian(df$date[df$year == "2014"], origin = as.Date("2014-01-01"), units = "days")
+df$j.date[df$year == "2018"] <- julian(df$date[df$year == "2018"], origin = as.Date("2018-01-01"), units = "days")
+
+# converting time to minutes from midnight in column mminutes
+df$time <- as.character(df$time)
+df$time2 <- paste(df$time, ":00", sep = "")
+df$time2[df$time2 == "NA:00"] <- NA
+df$mminutes <- 60*24*as.numeric(times(df$time2))
+
+# adding column parasite 
+df$parasite[df$cc.eggs == "0"] <- 0
+df$parasite[df$cc.eggs > "0"] <- 1
+df$parasite <- as.factor(df$parasite)
+
+# converting laying date to julian date in column j.laying.date
+# adding column nestday by subtracting j.date from j.laying.date
+df$laying.date <- as.Date(df$laying.date, format = "%Y.%m.%d")
+df$j.laying.date[df$year == "2013"] <- julian(df$laying.date[df$year == "2013"], origin = as.Date("2013-01-01"))
+df$j.laying.date[df$year == "2014"] <- julian(df$laying.date[df$year == "2014"], origin = as.Date("2014-01-01"))
+df$j.laying.date[df$year == "2018"] <- julian(df$laying.date[df$year == "2018"], origin = as.Date("2018-01-01"))
+
+df$nestday <- df$j.date - df$j.laying.date
+
+# we had some concernes regarding the correct identification of class 1 alarm calls, so we made some histograms with the observers. It turns out GN probably cannot reliably identify class 1 alarm calls, which is not surprising, due to the ambiguity of the class 1. We decided to drop class 1 alarm calls from all further analyses. Thus, we have a new binomial variable: "0" is no alarm, "1" is (strong) alarm call.
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm)
+hist(df$boots.grwf)
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "ZSI"])
+hist(df$boots.grwf[df$observer == "ZSI"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "BM"])
+hist(df$boots.grwf[df$observer == "BM"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "BM, MA"])
+hist(df$boots.grwf[df$observer == "BM, MA"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "MA"])
+hist(df$boots.grwf[df$observer == "MA"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "GN"])
+hist(df$boots.grwf[df$observer == "GN"])
+
+dev.off()
+
+# removing class 1 and converting class 2 to class 1
+df$boots.grwf[df$boots.grwf == "0"] <- 0
+df$boots.grwf[df$boots.grwf == "1"] <- NA
+df$boots.grwf[df$boots.grwf == "2"] <- 1
+
+df$boots.grwm[df$boots.grwm == "0"] <- 0
+df$boots.grwm[df$boots.grwm == "1"] <- NA
+df$boots.grwm[df$boots.grwm == "2"] <- 1
+
+df$pair[df$boots.grwm == "0" & df$boots.grwf == "0"] <- 0
+df$pair[df$boots.grwm == "1" & df$boots.grwf == "0"] <- 1
+df$pair[df$boots.grwm == "0" & df$boots.grwf == "1"] <- 2
+df$pair[df$boots.grwm == "1" & df$boots.grwf == "1"] <- 3
+df$pair <- as.factor(df$pair)
+
+# adding column bpair
+df$bpair[df$pair == "0"] <- 0
+df$bpair[df$pair != "0"] <- 1
+```
+
+```{r subseting and removing NAs}
+
+# creating a full df
+df.full <- df
+df <- df.full
+
+# removing NAs and subseting to nest visitis between 6 AM and 12 PM
+#df <- df[!is.na(df$parasite),]
+#df <- df[!is.na(df$nestday),]
+#df <- df[!is.na(df$mminutes),]
+#df <- df[!is.na(df$site),]
+#df <- df[!is.na(df$boots.grwf),]
+#df <- df[!is.na(df$boots.grwm),]
+#df <- df[!is.na(df$pair),]
+
+df <- subset(df, mminutes >= 360 & mminutes <= 720 | mminutes >= 1000 )
+
+#df1 <- subset(df, mminutes >= 360 & mminutes <= 720)
+#df2 <- subset(df, mminutes >=1000)
+#df3 <- rbind(df1, df2)
+
+# 720 = 12:00, 660 = 11:00, 360 = 6:00, 1000 = 16:40, 1020 = 17:00, 1080 = 18:00, 1140 = 19:00
+
+#df <- df[df$observer != "ZA",]
+#df <- df[df$year != "2014",]
+
+#df <- subset(df, nestday > 0) # removing negative nestday values
+df <- subset(df, pull = 1 ) # removing nests with pull
+df <- subset(df, abandoned = 1) # removing abandoned nests
+```
+
+```{r exploratory analyses on df}
+
+head(df)
+summary(df)
+str(df)
+```
+
+```{r repeatability of alarm call}
+
+# repeatability with one grouping level
+
+df$multiple <- 1
+n <- summaryBy(multiple ~ nestid, data = df, FUN = c(sum))
+m <- n$nestid[n$multiple.sum > 1]
+
+df.rep <- df[df$nestid %in% m,]
+df.rep <- df[!is.na(df$boots.grwf),]
+
+boots.grwf.rpt <- rptBinary(boots.grwf ~ (1|nestid), grname=c("nestid"), data=df.rep)
+beep(4)
+boots.grwf.rpt
+
+boots.grwm.rpt <- rptBinary(boots.grwm ~ (1|nestid), grname=c("nestid"), data=df.rep)
+beep(4)
+boots.grwm.rpt
+
+pair.rpt <- rptBinary(bpair ~ (1|nestid), grname=c("nestid"), data=df.rep)
+beep(4)
+pair.rpt
+
+# number of df.rep nests, mean and sd
+
+sumvisit <- summaryBy(multiple ~ nestid, data = df.rep, FUN = c(sum))
+length(unique(df.rep$nestid))
+mean(sumvisit$multiple.sum)
+sd(sumvisit$multiple.sum)
+
+# percentage of nests with at least two visits
+
+(length(unique(df.rep$nestid))*100)/length(unique(df$nestid))
+
+```
+
+```{r GRW alarm call probability to observers correlates to clutch size}
+
+m1.1 <- glmer(boots.grwf ~ total.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(j.date)
+               + scale(laying.date)
+               + parasite
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m1.1)
+drop1(m1.1, test = "Chisq")
+
+m1.2 <- update(m1.1, .~. - parasite)   
+summary(m1.2)
+drop1(m1.2, test = "Chisq")
+
+m1.3 <- update(m1.2, .~. - scale(nestday))
+summary(m1.3)
+drop1(m1.3, test = "Chisq")
+
+m1.4 <- update(m1.3, .~. - scale(mminutes))
+summary(m1.4)
+drop1(m1.4, test = "Chisq")
+
+m1.5 <- update(m1.4, .~. - scale(laying.date))
+summary(m1.5)
+drop1(m1.5, test = "Chisq")
+
+m1.6 <- update(m1.5, .~. - scale(j.date))
+summary(m1.6)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

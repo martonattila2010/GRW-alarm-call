@@ -1,0 +1,1931 @@
+---
+title: "Great Reed Warbler alarm call attracts brood parasites"
+author: "Marton Attila"
+date: "2018 january 26"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+Since some of the data in data_no_exp_2013_2014B.csv was missing or eroneous, I rebuildeld the dataset named DF.csv including the total number of GRW eggs and total number of eggs in the nest. This csv file should be used in all subseqent analyses.
+
+The aim of this study is to test if the alarm call of Great Reed Warbler pairs might reveal their nest location for the Common Cuckoo. We gathered nest-site alarm call observations in 2013-2014 for a [1] corelative study and we performed an [2] experiment to test this hypothesis in 2014.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library setup}
+
+library(chron)
+library(Matrix)
+library(lme4)
+library(nlme)
+library(ordinal)
+library(car)
+library(rgdal)
+library(geosphere)
+library(rptR)
+library(doBy)
+library(beepr)
+
+```
+
+```{r dataset and variable setup}
+
+setwd("C:/Users/Marton Attila/OneDrive/PhD/1. GRW alarm vs CC parasitism/2018")
+
+df <- read.csv("DFx2.csv", header = T, sep = ";")
+summary(df)
+
+# converting nestid, year, site and observer to factor
+df$nestid <- as.factor(df$nestid)
+df$year <- as.factor(df$year)
+df$site <- as.factor(df$site)
+df$observer <- as.factor(df$observer)
+
+df$pull[is.na(df$pull)] <- 0
+df$pull <- as.factor(df$pull)
+df$abandoned[is.na(df$abandoned)] <- 0
+df$abandoned <- as.factor(df$abandoned)
+
+# converting date to julian date in column j.date using pachage chron 
+df$date <- as.Date(df$date, format = '%Y.%m.%d')
+df$j.date[df$year == "2013"] <- julian(df$date[df$year == "2013"], origin = as.Date("2013-01-01"), units = "days")
+df$j.date[df$year == "2014"] <- julian(df$date[df$year == "2014"], origin = as.Date("2014-01-01"), units = "days")
+df$j.date[df$year == "2018"] <- julian(df$date[df$year == "2018"], origin = as.Date("2018-01-01"), units = "days")
+
+# converting time to minutes from midnight in column mminutes
+df$time <- as.character(df$time)
+df$time2 <- paste(df$time, ":00", sep = "")
+df$time2[df$time2 == "NA:00"] <- NA
+df$mminutes <- 60*24*as.numeric(times(df$time2))
+
+# adding column parasite 
+df$parasite[df$cc.eggs == "0"] <- 0
+df$parasite[df$cc.eggs > "0"] <- 1
+df$parasite <- as.factor(df$parasite)
+
+# adding column r.cc.eggs, as the column representing the ratio of cc.eggs/total.eggs 
+
+df$r.cc.eggs <- (df$cc.eggs/df$total.eggs)
+df$r.cc.eggs[df$r.cc.eggs == "NaN"] <- 0 # for cases when ratio is 0/0
+
+# converting laying date to julian date in column j.laying.date
+# adding column nestday by subtracting j.date from j.laying.date
+df$laying.date <- as.Date(df$laying.date, format = "%Y.%m.%d")
+df$j.laying.date[df$year == "2013"] <- julian(df$laying.date[df$year == "2013"], origin = as.Date("2013-01-01"))
+df$j.laying.date[df$year == "2014"] <- julian(df$laying.date[df$year == "2014"], origin = as.Date("2014-01-01"))
+df$j.laying.date[df$year == "2018"] <- julian(df$laying.date[df$year == "2018"], origin = as.Date("2018-01-01"))
+
+df$nestday <- df$j.date - df$j.laying.date
+
+# we had some concernes regarding the correct identification of class 1 alarm calls, so we made some histograms with the observers. It turns out GN probably cannot reliably identify class 1 alarm calls, which is not surprising, due to the ambiguity of the class 1. We decided to drop class 1 alarm calls from all further analyses. Thus, we have a new binomial variable: "0" is no alarm, "1" is (strong) alarm call.
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm)
+hist(df$boots.grwf)
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "ZSI"])
+hist(df$boots.grwf[df$observer == "ZSI"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "BM"])
+hist(df$boots.grwf[df$observer == "BM"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "BM, MA"])
+hist(df$boots.grwf[df$observer == "BM, MA"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "MA"])
+hist(df$boots.grwf[df$observer == "MA"])
+
+par(mfrow=c(1,2))
+hist(df$boots.grwm[df$observer == "GN"])
+hist(df$boots.grwf[df$observer == "GN"])
+
+# removing class 1 and converting class 2 to class 1
+df$boots.grwf[df$boots.grwf == "0"] <- 0
+df$boots.grwf[df$boots.grwf == "1"] <- NA
+df$boots.grwf[df$boots.grwf == "2"] <- 1
+
+df$boots.grwm[df$boots.grwm == "0"] <- 0
+df$boots.grwm[df$boots.grwm == "1"] <- NA
+df$boots.grwm[df$boots.grwm == "2"] <- 1
+
+df$pair[df$boots.grwm == "0" & df$boots.grwf == "0"] <- 0
+df$pair[df$boots.grwm == "1" & df$boots.grwf == "0"] <- 1
+df$pair[df$boots.grwm == "0" & df$boots.grwf == "1"] <- 2
+df$pair[df$boots.grwm == "1" & df$boots.grwf == "1"] <- 3
+df$pair <- as.factor(df$pair)
+
+# adding column bpair
+df$bpair[df$pair == "0"] <- 0
+df$bpair[df$pair != "0"] <- 1
+```
+
+```{r subseting and removing NAs}
+
+# creating a full df
+df.full <- df
+
+# removing NAs and subseting to nest visitis between 6 AM and 12 PM
+df <- df[!is.na(df$parasite),]
+df <- df[!is.na(df$nestday),]
+df <- df[!is.na(df$mminutes),]
+df <- df[!is.na(df$site),]
+#df <- df[!is.na(df$boots.grwf),]
+#df <- df[!is.na(df$boots.grwm),]
+#df <- df[!is.na(df$pair),]
+
+#df <- subset(df, mminutes <= 720 & mminutes >= 360) # 720 = 12:00, 660 = 11:00, 360 = 6:00
+
+df <- df[df$observer != "ZA",]
+#df <- df[df$year != "2014",]
+
+df <- subset(df, nestday > 0) # removing negative nestday values
+#df <- subset(df, pull = 1 ) # removing nests with pull
+#df <- subset(df, abandoned = 1) # removing abandoned nests
+
+```
+
+```{r exploratory analyses on df}
+
+head(df)
+summary(df)
+str(df)
+
+```
+
+```{r repeatability of alarm call}
+
+# repeatability with one grouping level
+
+df$multiple <- 1
+n <- summaryBy(multiple ~ nestid, data = df, FUN = c(sum))
+m <- n$nestid[n$multiple.sum > 1]
+
+df.rep <- df[df$nestid %in% m,]
+
+female.rpt <- rptBinary(boots.grwf ~ (1|nestid), grname=c("nestid"), data=df.rep)
+beep()
+
+male.rpt <- rptBinary(boots.grwm ~ (1|nestid), grname=c("nestid"), data=df.rep)
+beep(2)
+
+pair.rpt <- rptBinary(bpair ~ (1|nestid), grname=c("nestid"), data=df.rep)
+beep(3)
+
+# number of df.rep nests, mean and sd
+
+sumvisit <- summaryBy(multiple ~ nestid, data = df.rep, FUN = c(sum))
+length(unique(df.rep$nestid))
+mean(sumvisit$multiple.sum)
+sd(sumvisit$multiple.sum)
+
+# percentage of nests with at least two visits
+
+(length(unique(df.rep$nestid))*100)/length(unique(df$nestid))
+
+```
+
+```{r model 1: CLMM: pair ~ grw.eggs + cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: pair ~ grw.eggs*** + cc.eggs** - scale(nestday)NS* + (1|nestid)***
+
+m1.1 <- clmm(pair ~ grw.eggs
+             + cc.eggs
+             + scale(mminutes)
+             + scale(nestday)
+             #+ scale(nest.density)
+             + (1|nestid)
+             + (1|site)
+             + (1|observer),
+             data=df,
+             control = list(method = "nlminb", maxIter = 1e6, grtol=5e-4),
+             na.action=na.omit)
+summary(m1.1)
+drop1(m1.1, test = "Chisq")
+
+m1.2 <- update(m1.1, .~. - scale(nestday))
+summary(m1.2)
+drop1(m1.2, test = "Chisq")
+
+m1.3 <- update(m1.2, .~. - scale(mminutes))
+summary(m1.3)
+drop1(m1.3, test = "Chisq")
+
+# testing if random factors have an effect or not.
+m1.3.r1 <- update(m1.3, .~. - (1|nestid))
+anova(m1.3, m1.3.r1)
+m1.3.r2 <- update(m1.3, .~. - (1|site))
+anova(m1.3, m1.3.r2)
+m1.3.r3 <- update(m1.3, .~. - (1|observer))
+anova(m1.3, m1.3.r3)
+
+```
+
+```{r model 2: CLMM: pair ~ grw.eggs, eval=FALSE, include=FALSE}
+# RESULT: pair ~ grw.eggs** + (1|nestid)***
+
+m2.1 <- clmm(pair ~ grw.eggs
+             + scale(mminutes)
+             + scale(nestday)
+             + scale(nest.density)
+             + (1|nestid)
+             + (1|site)
+             + (1|observer),
+             data=df,
+             control = list(method = "nlminb", maxIter = 1e6, grtol=5e-4),
+             na.action=na.omit)
+summary(m2.1)
+drop1(m2.1, test = "Chisq")
+
+m2.2 <- update(m2.1, .~. - scale(nest.density))
+summary(m2.2)
+drop1(m2.2, test = "Chisq")
+
+m2.3 <- update(m2.2, .~. - scale(mminutes))
+summary(m2.3)
+drop1(m2.3, test = "Chisq")
+
+m2.4 <- update(m2.3, .~. - scale(nestday))
+summary(m2.4)
+
+# testing if random factors have an effect or not.
+m2.4.r1 <- update(m2.4, .~. - (1|nestid))
+anova(m2.4, m2.4.r1)
+m2.4.r2 <- update(m2.4, .~. - (1|site))
+anova(m2.4, m2.4.r2)
+m2.4.r3 <- update(m2.4, .~. - (1|observer))
+anova(m2.4, m2.4.r3)
+
+```
+
+```{r model 3: CLMM: pair ~ grw.eggs, eval=FALSE, include=FALSE}
+# RESULT: pair ~ cc.eggs** + (1|nestid)***
+
+m3.1 <- clmm(pair ~ cc.eggs
+             + scale(mminutes)
+             + scale(nestday)
+             + scale(nest.density)
+             + (1|nestid)
+             + (1|site)
+             + (1|observer),
+             data=df,
+             control = list(method = "nlminb", maxIter = 1e6, grtol=5e-4),
+             na.action=na.omit)
+summary(m3.1)
+drop1(m3.1, test = "Chisq")
+
+m3.2 <- update(m3.1, .~. - scale(mminutes))
+summary(m3.2)
+drop1(m3.2, test = "Chisq")
+
+m3.3 <- update(m3.2, .~. - scale(nestday))
+summary(m3.3)
+drop1(m3.3, test = "Chisq")
+
+m3.4 <- update(m3.3, .~. - scale(nest.density))
+summary(m3.4)
+
+# testing if random factors have an effect or not.
+m3.4.r1 <- update(m3.4, .~. - (1|nestid))
+anova(m3.4, m3.4.r1)
+m3.4.r2 <- update(m3.4, .~. - (1|site))
+anova(m3.4, m3.4.r2)
+m3.4.r3 <- update(m3.4, .~. - (1|observer))
+anova(m3.4, m3.4.r3)
+
+```
+
+```{r model 4: CLMM: pair ~ total.eggs, eval=FALSE, include=FALSE}
+# RESULT: pair ~ total.eggs*** - scale(nestday)* + (1|nestid)***
+
+m4.1 <- clmm(pair ~ total.eggs
+             + scale(mminutes)
+             + scale(nestday)
+             + scale(nest.density)
+             + (1|nestid)
+             + (1|site)
+             + (1|observer),
+             data=df,
+             control = list(method = "nlminb", maxIter = 1e6, grtol=5e-4),
+             na.action=na.omit)
+summary(m4.1)
+drop1(m4.1, test = "Chisq")
+
+m4.2 <- update(m4.1, .~. - scale(nest.density))
+summary(m4.2)
+drop1(m4.2, test = "Chisq")
+
+m4.3 <- update(m4.2, .~. - scale(mminutes))
+summary(m4.3)
+drop1(m4.3, test = "Chisq")
+
+# testing if random factors have an effect or not.
+m4.3.r1 <- update(m4.3, .~. - (1|nestid))
+anova(m4.3, m4.3.r1)
+m4.3.r2 <- update(m4.3, .~. - (1|site))
+anova(m4.3, m4.3.r2)
+m4.3.r3 <- update(m4.3, .~. - (1|observer))
+anova(m4.3, m4.3.r3)
+
+```
+
+```{r model 5: CLMM: pair ~ parasite, eval=FALSE, include=FALSE}
+# RESULT: pair ~ parasite* + (1|nestid)***
+
+m5.1 <- clmm(pair ~ parasite
+             + scale(mminutes)
+             + scale(nestday)
+             + scale(nest.density)
+             + (1|nestid)
+             + (1|site)
+             + (1|observer),
+             data=df,
+             control = list(method = "nlminb", maxIter = 1e6, grtol=5e-4),
+             na.action=na.omit)
+summary(m5.1)
+drop1(m5.1, test = "Chisq")
+
+m5.2 <- update(m5.1, .~. - scale(mminutes))
+summary(m5.2)
+drop1(m5.2, test = "Chisq")
+
+m5.3 <- update(m5.2, .~. - scale(nestday))
+summary(m5.3)
+drop1(m5.3, test = "Chisq")
+
+m5.4 <- update(m5.3, .~. - scale(nest.density))
+summary(m5.4)
+
+# testing if random factors have an effect or not.
+m5.4.r1 <- update(m5.4, .~. - (1|nestid))
+anova(m5.4, m5.4.r1)
+m5.4.r2 <- update(m5.4, .~. - (1|site))
+anova(m5.4, m5.4.r2)
+m5.4.r3 <- update(m5.4, .~. - (1|observer))
+anova(m5.4, m5.4.r3)
+
+```
+
+```{r model 6: CLMM: pair ~ r.cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: pair ~ r.cc.eggs NS + (1|nestid)***
+
+m6.1 <- clmm(pair ~ r.cc.eggs
+             + scale(mminutes)
+             + scale(nestday)
+             + scale(nest.density)
+             + (1|nestid)
+             + (1|site)
+             + (1|observer),
+             data=df,
+             control = list(method = "nlminb", maxIter = 1e6, grtol=5e-4),
+             na.action=na.omit)
+summary(m6.1)
+drop1(m6.1, test = "Chisq")
+
+m6.2 <- update(m6.1, .~. - scale(mminutes))
+summary(m6.2)
+drop1(m6.2, test = "Chisq")
+
+m6.3 <- update(m6.2, .~. - scale(nestday))
+summary(m6.3)
+drop1(m6.3, test = "Chisq")
+
+m6.4 <- update(m6.3, .~. - scale(nest.density))
+summary(m6.4)
+
+# testing if random factors have an effect or not.
+m6.4.r1 <- update(m6.4, .~. - (1|nestid))
+anova(m6.4, m6.4.r1)
+m6.4.r2 <- update(m6.4, .~. - (1|site))
+anova(m6.4, m6.4.r2)
+m6.4.r3 <- update(m6.4, .~. - (1|observer))
+anova(m6.4, m6.4.r3)
+
+```
+
+```{r model 7: GLMER: bpair ~ grw.eggs + cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: bpair ~ grw.eggs* + cc.eggs** + (1|nestid)***
+# ERROR: after removing negative nestday data model failes to converge
+
+m7.1 <- glmer(bpair ~ grw.eggs
+              + cc.eggs
+              + scale(mminutes)
+              + scale(nestday)
+              + scale(nest.density)
+              + (1|nestid)
+              + (1|observer)
+              + (1|site)
+              ,
+              data=df, family = "binomial",
+              control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+              na.action=na.omit)
+summary(m7.1)
+drop1(m7.1, test = "Chisq")
+
+m7.2 <- update(m7.1, .~. - scale(mminutes))
+summary(m7.2)
+drop1(m7.2, test = "Chisq")
+
+m7.3 <- update(m7.2, .~. - scale(nest.density))
+summary(m7.3)
+drop1(m7.3, test = "Chisq")
+
+m7.4 <- update(m7.3, .~. - scale(nestday))
+summary(m7.4)
+
+# testing if random factors have an effect or not.
+m7.4.r1 <- update(m7.4, .~. - (1|nestid))
+anova(m7.4, m7.4.r1)
+m7.4.r2 <- update(m7.4, .~. - (1|site))
+anova(m7.4, m7.4.r2)
+m7.4.r3 <- update(m7.4, .~. - (1|observer))
+anova(m7.4, m7.4.r3)
+
+```
+
+```{r model 8: GLMER: bpair ~ grw.eggs, eval=FALSE, include=FALSE}
+# RESULT: bpair ~ grw.eggs* + (1|nestid)***
+
+m8.1 <- glmer(bpair ~ grw.eggs
+              + scale(mminutes)
+              + scale(nestday)
+              + scale(nest.density)
+              + (1|nestid)
+              + (1|observer)
+              + (1|site)
+              ,
+              data=df, family = "binomial",
+              control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+              na.action=na.omit)
+summary(m8.1)
+drop1(m8.1, test = "Chisq")
+
+m8.2 <- update(m8.1, .~. - scale(nest.density))
+summary(m8.2)
+drop1(m8.2, test = "Chisq")
+
+m8.3 <- update(m8.2, .~. - scale(mminutes))
+summary(m8.3)
+drop1(m8.3, test = "Chisq")
+
+m8.4 <- update(m8.3, .~. - scale(nestday))
+summary(m8.4)
+
+# testing if random factors have an effect or not.
+m8.4.r1 <- update(m8.4, .~. - (1|nestid))
+anova(m8.4, m8.4.r1)
+m8.4.r2 <- update(m8.4, .~. - (1|site))
+anova(m8.4, m8.4.r2)
+m8.4.r3 <- update(m8.4, .~. - (1|observer))
+anova(m8.4, m8.4.r3)
+
+```
+
+```{r model 9: GLMER: bpair ~ cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: bpair ~ cc.eggs** + (1|nestid)***
+
+m9.1 <- glmer(bpair ~ cc.eggs
+              + scale(mminutes)
+              + scale(nestday)
+              + scale(nest.density)
+              + (1|nestid)
+              + (1|observer)
+              + (1|site)
+              ,
+              data=df, family = "binomial",
+              control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+              na.action=na.omit)
+summary(m9.1)
+drop1(m9.1, test = "Chisq")
+
+m9.2 <- update(m9.1, .~. - scale(mminutes))
+summary(m9.2)
+drop1(m9.2, test = "Chisq")
+
+m9.3 <- update(m9.2, .~. - scale(nestday))
+summary(m9.3)
+drop1(m9.3, test = "Chisq")
+
+m9.4 <- update(m9.3, .~. - scale(nest.density))
+summary(m9.4)
+
+# testing if random factors have an effect or not.
+m9.4.r1 <- update(m9.4, .~. - (1|nestid))
+anova(m9.4, m9.4.r1)
+m9.4.r2 <- update(m9.4, .~. - (1|site))
+anova(m9.4, m9.4.r2)
+m9.4.r3 <- update(m9.4, .~. - (1|observer))
+anova(m9.4, m9.4.r3)
+
+```
+
+```{r model 10: GLMER: bpair ~ total.eggs, eval=FALSE, include=FALSE}
+# RESULT: bpair ~ total.eggs*** - scale(nestday) NS* + (1|nestid)***
+
+m10.1 <- glmer(bpair ~ total.eggs
+              + scale(mminutes)
+              + scale(nestday)
+              + scale(nest.density)
+              + (1|nestid)
+              + (1|observer)
+              + (1|site)
+              ,
+              data=df, family = "binomial",
+              control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+              na.action=na.omit)
+summary(m10.1)
+drop1(m10.1, test = "Chisq")
+
+m10.2 <- update(m10.1, .~. - scale(nest.density))
+summary(m10.2)
+drop1(m10.2, test = "Chisq")
+
+m10.3 <- update(m10.2, .~. - scale(mminutes))
+summary(m10.3)
+drop1(m10.3, test = "Chisq")
+
+
+# testing if random factors have an effect or not.
+m10.3.r1 <- update(m10.3, .~. - (1|nestid))
+anova(m10.3, m10.3.r1)
+m10.3.r2 <- update(m10.3, .~. - (1|site))
+anova(m10.3, m10.3.r2)
+m10.3.r3 <- update(m10.3, .~. - (1|observer))
+anova(m10.3, m10.3.r3)
+
+```
+
+```{r model 11: GLMER: bpair ~ parasite, eval=FALSE, include=FALSE}
+# RESULT: bpair ~ parasite* + (1|nestid)***
+# ERROR: After removing negative nestdays model failes to converge.
+
+m11.1 <- glmer(bpair ~ parasite
+              + total.eggs
+              + parasite:total.eggs
+              + scale(mminutes)
+              + parasite:scale(mminutes)
+              + scale(nestday)
+              + parasite:scale(nestday)
+              + scale(nest.density)
+              + parasite:scale(nest.density)
+              + (1|nestid)
+              + (1|observer)
+              + (1|site)
+              ,
+              data=df, family = "binomial",
+              control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+              na.action=na.omit)
+summary(m11.1)
+drop1(m11.1, test = "Chisq")
+
+m11.2 <- update(m11.1, .~. - scale(mminutes))
+summary(m11.2)
+drop1(m11.2, test = "Chisq")
+
+m11.3 <- update(m11.2, .~. - scale(nest.density))
+summary(m11.3)
+drop1(m11.3, test = "Chisq")
+
+m11.4 <- update(m11.3, .~. - parasite:total.eggs)
+summary(m11.4)
+
+m11.5 <- update(m11.4, .~. - scale(nestday))
+summary(m11.5)
+
+# testing if random factors have an effect or not.
+m11.4.r1 <- update(m11.4, .~. - (1|nestid))
+anova(m11.4, m11.4.r1)
+m11.4.r2 <- update(m11.4, .~. - (1|site))
+anova(m11.4, m11.4.r2)
+m11.4.r3 <- update(m11.4, .~. - (1|observer))
+anova(m11.4, m11.4.r3)
+
+```
+
+```{r model 11: GLMER: bpair ~ r.cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: bpair ~ r.cc.eggs NS + (1|nestid)***
+
+m12.1 <- glmer(bpair ~ r.cc.eggs
+              + scale(mminutes)
+              + scale(nestday)
+              + scale(nest.density)
+              + (1|nestid)
+              + (1|observer)
+              + (1|site)
+              ,
+              data=df, family = "binomial",
+              control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+              na.action=na.omit)
+summary(m12.1)
+drop1(m12.1, test = "Chisq")
+
+m12.2 <- update(m12.1, .~. - scale(mminutes))
+summary(m12.2)
+drop1(m12.2, test = "Chisq")
+
+m12.3 <- update(m12.2, .~. - scale(nestday))
+summary(m12.3)
+drop1(m12.3, test = "Chisq")
+
+m12.4 <- update(m12.3, .~. - scale(nest.density))
+summary(m12.4)
+
+# testing if random factors have an effect or not.
+m12.4.r1 <- update(m12.4, .~. - (1|nestid))
+anova(m12.4, m12.4.r1)
+m12.4.r2 <- update(m12.4, .~. - (1|site))
+anova(m12.4, m12.4.r2)
+m12.4.r3 <- update(m12.4, .~. - (1|observer))
+anova(m12.4, m12.4.r3)
+
+```
+
+```{r model 13: GLMER: female ~ grw.eggs + cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: female ~ grw.eggs** + cc.eggs** + (1|nestid)***
+
+m13.1 <- glmer(female ~ grw.eggs
+               + cc.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m13.1)
+drop1(m13.1, test = "Chisq")
+
+m13.2 <- update(m13.1, .~. - scale(mminutes))
+summary(m13.2)
+drop1(m13.2, test = "Chisq")
+
+m13.3 <- update(m13.2, .~. - scale(nest.density))
+summary(m13.3)
+drop1(m13.3, test = "Chisq")
+
+m13.4 <- update(m13.3, .~. - scale(nestday))
+summary(m13.4)
+
+# testing if random factors have an effect or not.
+m13.4.r1 <- update(m13.4, .~. - (1|nestid))
+anova(m13.4, m13.4.r1)
+m13.4.r2 <- update(m13.4, .~. - (1|observer))
+anova(m13.4, m13.4.r2)
+m13.4.r3 <- update(m13.4, .~. - (1|site))
+anova(m13.4, m13.4.r3)
+
+```
+
+```{r model 14: GLMER: female ~ grw.eggs, eval=FALSE, include=FALSE}
+# RESULT: female ~ grw.eggs** + (1|nestid)***
+
+m14.1 <- glmer(female ~ grw.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m14.1)
+drop1(m14.1, test = "Chisq")
+
+m14.2 <- update(m14.1, .~. - scale(nest.density))
+summary(m14.2)
+drop1(m14.2, test = "Chisq")
+
+m14.3 <- update(m14.2, .~. - scale(nestday))
+summary(m14.3)
+drop1(m14.3, test = "Chisq")
+
+m14.4 <- update(m14.3, .~. - scale(mminutes))
+summary(m14.4)
+
+# testing if random factors have an effect or not.
+m14.4.r1 <- update(m14.4, .~. - (1|nestid))
+anova(m14.4, m14.4.r1)
+m14.4.r2 <- update(m14.4, .~. - (1|observer))
+anova(m14.4, m14.4.r2)
+m14.4.r3 <- update(m14.4, .~. - (1|site))
+anova(m14.4, m14.4.r3)
+
+```
+
+```{r model 15: GLMER: female ~ cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: female ~ cc.eggs** + (1|nestid)***
+
+m15.1 <- glmer(female ~ cc.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m15.1)
+drop1(m15.1, test = "Chisq")
+
+m15.2 <- update(m15.1, .~. - scale(mminutes))
+summary(m15.2)
+drop1(m15.2, test = "Chisq")
+
+m15.3 <- update(m15.2, .~. - scale(nestday))
+summary(m15.3)
+drop1(m15.3, test = "Chisq")
+
+m15.4 <- update(m15.3, .~. - scale(nest.density))
+summary(m15.4)
+
+# testing if random factors have an effect or not.
+m15.4.r1 <- update(m15.4, .~. - (1|nestid))
+anova(m15.4, m15.4.r1)
+m15.4.r2 <- update(m15.4, .~. - (1|observer))
+anova(m15.4, m15.4.r2)
+m15.4.r3 <- update(m15.4, .~. - (1|site))
+anova(m15.4, m15.4.r3)
+
+```
+
+```{r model 16: GLMER: female ~ total.eggs}
+# RESULT: female ~ total.eggs*** - scale(nestday)* + (1|nestid)***
+
+m16.1 <- glmer(boots.grwf ~ total.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               #+ scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m16.1)
+drop1(m16.1, test = "Chisq")
+
+m16.2 <- update(m16.1, .~. - scale(nestday))
+summary(m16.2)
+drop1(m16.2, test = "Chisq")
+
+m16.3 <- update(m16.2, .~. - scale(mminutes))
+summary(m16.3)
+drop1(m16.3, test = "Chisq")
+
+# testing if random factors have an effect or not.
+m16.2.r1 <- update(m16.2, .~. - (1|nestid))
+anova(m16.2, m16.2.r1)
+m16.2.r2 <- update(m16.2, .~. - (1|observer))
+anova(m16.2, m16.2.r2)
+m16.2.r3 <- update(m16.2, .~. - (1|site))
+anova(m16.2, m16.2.r3)
+
+
+#plot
+#plot female
+fe <- fixef(m16.2)
+ilogit <- function(x) {1/(1+exp(-x))}
+
+new.te.f <- seq(min(df$total.eggs), max(df$total.eggs), 0.01)
+real.te.f <- new.te.f * sd(df$total.eggs) + mean(df$total.eggs)
+
+te <- fe["(Intercept)"] + fe["total.eggs"] * new.te.f
+
+par(mar=c(5, 5, 2, 2))
+plot(boots.grwf ~ total.eggs, data=df,
+     #type = 'n',
+     cex=1.5, pch=1, col="darkblue", 
+     xlim=c(0, 12),
+     xlab="Clutch size", 
+     ylab="Probability of female alarm call", 
+     cex.lab=1)
+lines(real.te.f, ilogit(te), lty=1, lwd=3, col="darkblue")
+
+
+#legend(x = 1, y = 0.3, c("non-parasitized", "parasitized"), pch=c(1, 4), col=c("darkblue", "darkred"), pt.cex=1, cex=1, bty="n", ncol=1)
+
+```
+
+```{r model 17: GLMER: female ~ parasite:total.eggs}
+# RESULT: female ~ parasite NS* + total.eggs** + scale(nestday) NS - parasite:scale(nestday)** + (1|nestid)*
+
+m17.1 <- glmer(boots.grwf ~ parasite
+               + total.eggs
+               + parasite:total.eggs
+               + scale(mminutes)
+               + parasite:scale(mminutes)
+               + scale(nestday)
+               + parasite:scale(nestday)
+               #+ scale(nest.density)
+               #+ parasite:scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m17.1)
+drop1(m17.1, test = "Chisq")
+
+vif.mer(m17.1)
+
+m17.2 <- update(m17.1, .~. - parasite:scale(mminutes))
+summary(m17.2)
+drop1(m17.2, test = "Chisq")
+
+m17.3 <- update(m17.2, .~. - parasite:scale(nestday))
+summary(m17.3)
+drop1(m17.3, test = "Chisq")
+
+m17.4 <- update(m17.3, .~. - scale(nestday))
+summary(m17.4)
+drop1(m17.4, test = "Chisq")
+
+m17.5 <- update(m17.4, .~. - scale(mminutes))
+summary(m17.5)
+drop1(m17.5, test = "Chisq")
+
+#m17.6 <- update(m17.5, .~. - scale(mminutes))
+#summary(m17.6)
+#drop1(m17.6, test = "Chisq")
+
+vif.mer(m17.6)
+
+# testing if random factors have an effect or not.
+m17.5.r1 <- update(m17.6, .~. - (1|nestid))
+anova(m17.6, m17.5.r1)
+m17.5.r2 <- update(m17.6, .~. - (1|observer))
+anova(m17.6, m17.5.r2)
+m17.5.r3 <- update(m17.6, .~. - (1|site))
+anova(m17.6, m17.5.r3)
+
+## plot by FA
+
+fe <- fixef(m17.5)
+ilogit <- function(x) {1/(1+exp(-x))}
+newNDp0 <- seq(min(scale(df$nestday[df$parasite=="0"])), 
+                 max(scale(df$nestday[df$parasite=="0"])), 0.01)
+realNDp0 <- newNDp0 * sd(df$nestday[df$parasite=="0"]) + mean(df$nestday[df$parasite=="0"])
+newNDp1 <- seq(min(scale(df$nestday[df$parasite=="1"])), 
+                 max(scale(df$nestday[df$parasite=="1"])), 0.01)
+realNDp1 <- newNDp1 * sd(df$nestday[df$parasite=="1"]) + mean(df$nestday[df$parasite=="1"])
+
+p0 <- fe["(Intercept)"] + fe["scale(nestday)"] * newNDp0
+p1 <- (fe["(Intercept)"] + fe["parasite1"]) + (fe["scale(nestday)"] + fe["parasite1:scale(nestday)"]) * newNDp1
+
+par(mar=c(5, 5, 2, 2))
+plot(boots.grwf ~ nestday, data=df, subset=parasite=="0",
+     #type = 'n',
+     cex=1.5, pch=1, col="darkblue", 
+     xlim=c(0, 19),
+     xlab="Nest phase", 
+     ylab="Probability of female alarm call", 
+     cex.lab=1)
+points(boots.grwf ~ nestday, data=df, subset=parasite=="1",
+     cex=1.5, pch=4, col="darkred")
+lines(realNDp0, ilogit(p0), lty=1, lwd=3, col="darkblue")
+lines(realNDp1, ilogit(p1), lty=2, lwd=3, col="darkred")
+legend(x = 1, y = 0.3, c("non-parasitized", "parasitized"), pch=c(1, 4), col=c("darkblue", "darkred"), pt.cex=1, cex=1, bty="n", ncol=1)
+
+# splitting the dataset in two subset to see if the different parasite-nestday relationships are significant and calculating number of nests, mean and SD for both cases
+
+df.p0 <- df[df$parasite == 0,]
+df.p1 <- df[df$parasite != 0,]
+
+sumvisit.p0 <- summaryBy(multiple ~ nestid, data = df.p0, FUN = c(sum))
+length(unique(df.p0$nestid))
+mean(sumvisit.p0$multiple.sum)
+sd(sumvisit.p0$multiple.sum)
+
+sumvisit.p1 <- summaryBy(multiple ~ nestid, data = df.p1, FUN = c(sum))
+length(unique(df.p1$nestid))
+mean(sumvisit.p1$multiple.sum)
+sd(sumvisit.p1$multiple.sum)
+
+# sub-model with df$parasite == 0
+# RESULT: female ~ total.eggs**
+
+m17.1.p0 <- glmer(female ~ total.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df.p0,family = "binomial",
+               control=glmerControl(optimizer="bobyqa",     
+               optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m17.1.p0)
+drop1(m17.1.p0, test = "Chisq")
+
+m17.2.p0 <- update(m17.1.p0, .~. - scale(mminutes))
+summary(m17.2.p0)
+drop1(m17.2.p0, test = "Chisq")
+
+m17.3.p0 <- update(m17.2.p0, .~. - scale(nest.density))
+summary(m17.3.p0)
+drop1(m17.3.p0, test = "Chisq")
+
+m17.4.p0 <- update(m17.3.p0, .~. - scale(nestday))
+summary(m17.4.p0)
+drop1(m17.4.p0, test = "Chisq")
+
+# sub-model with df$parasite == 1
+# Result: female ~ total.eggs NS* - scale(nestday)*
+
+m17.1.p1 <- glmer(female ~ total.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df.p1,family = "binomial",
+               control=glmerControl(optimizer="bobyqa",
+               optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m17.1.p1)
+drop1(m17.1.p1, test = "Chisq")
+
+m17.2.p1 <- update(m17.1.p1, .~. - scale(nest.density))
+summary(m17.2.p1)
+drop1(m17.2.p1, test = "Chisq")
+
+m17.3.p1 <- update(m17.2.p1, .~. - scale(mminutes))
+summary(m17.3.p1)
+drop1(m17.3.p1, test = "Chisq")
+
+```
+
+```{r model 18: GLMER: female ~ r.cc.eggs}
+# RESULT: female ~ r.cc.eggs* + (1|nestid)*
+
+m18.1 <- glmer(female ~ r.cc.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa",
+               optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m18.1)
+drop1(m18.1, test = "Chisq")
+
+m18.2 <- update(m18.1, .~. - scale(mminutes))
+summary(m18.2)
+drop1(m18.2, test = "Chisq")
+
+m18.3 <- update(m18.2, .~. - scale(nest.density))
+summary(m18.3)
+drop1(m18.3, test = "Chisq")
+
+m18.4 <- update(m18.3, .~. - scale(nestday))
+summary(m18.4)
+
+# testing if random factors have an effect or not.
+m18.4.r1 <- update(m18.4, .~. - (1|nestid))
+anova(m18.4, m18.4.r1)
+m18.4.r2 <- update(m18.4, .~. - (1|observer))
+anova(m18.4, m18.4.r2)
+m18.4.r3 <- update(m18.4, .~. - (1|site))
+anova(m18.4, m18.4.r3)
+
+```
+
+```{r model 19: GLMER: male ~ grw.eggs + cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: male ~ grw.eggs** + (1|nestid)*** + (1|observer)**
+
+m19.1 <- glmer(male ~ grw.eggs
+               + cc.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m19.1)
+drop1(m19.1, test = "Chisq")
+
+m19.2 <- update(m19.1, .~. - scale(nest.density))
+summary(m19.2)
+drop1(m19.2, test = "Chisq") # model failed to converge
+
+m19.3 <- update(m19.2, .~. - scale(mminutes))
+summary(m19.3)
+drop1(m19.3, test = "Chisq")
+
+m19.4 <- update(m19.3, .~. - cc.eggs)
+summary(m19.4)
+drop1(m19.4, test = "Chisq")
+
+m19.5 <- update(m19.4, .~. - scale(nestday))
+summary(m19.5)
+
+# testing if random factors have an effect or not.
+m19.5.r1 <- update(m19.5, .~. - (1|nestid))
+anova(m19.5, m19.5.r1)
+m19.5.r2 <- update(m19.5, .~. - (1|observer))
+anova(m19.5, m19.5.r2)
+m19.5.r3 <- update(m19.5, .~. - (1|site))
+anova(m19.5, m19.5.r3)
+
+```
+
+```{r model 20: GLMER: male ~ grw.eggs, eval=FALSE, include=FALSE}
+# RESULT: male ~ grw.eggs** + (1|nestid)*** + (1|observer)**
+
+m20.1 <- glmer(male ~ grw.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               #+ scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m20.1)
+drop1(m20.1, test = "Chisq")
+
+m20.2 <- update(m20.1, .~. - scale(mminutes))
+summary(m20.2)
+drop1(m20.2, test = "Chisq")
+
+m20.3 <- update(m20.2, .~. - scale(nestday))
+summary(m20.3)
+drop1(m20.3, test = "Chisq")
+
+#m20.4 <- update(m20.3, .~. - scale(nest.density))
+#summary(m20.4)
+
+# testing if random factors have an effect or not.
+m20.3.r1 <- update(m20.3, .~. - (1|nestid))
+anova(m20.3, m20.3.r1)
+m20.3.r2 <- update(m20.3, .~. - (1|observer))
+anova(m20.3, m20.3.r2)
+m20.3.r3 <- update(m20.3, .~. - (1|site))
+anova(m20.3, m20.3.r3)
+
+```
+
+```{r model 21: GLMER: male ~ cc.eggs, eval=FALSE, include=FALSE}
+# RESULT: male ~ cc.eggs NS + (1|nestid)*** + (1|observer)**
+
+m21.1 <- glmer(male ~ cc.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m21.1)
+drop1(m21.1, test = "Chisq")
+
+m21.2 <- update(m21.1, .~. - scale(nest.density))
+summary(m21.2)
+drop1(m21.2, test = "Chisq")
+
+m21.3 <- update(m21.2, .~. - cc.eggs)
+summary(m21.3)
+drop1(m21.3, test = "Chisq")
+
+m21.4 <- update(m21.3, .~. - scale(mminutes))
+summary(m21.4)
+
+# testing if random factors have an effect or not.
+m21.4.r1 <- update(m21.4, .~. - (1|nestid))
+anova(m21.4, m21.4.r1)
+m21.4.r2 <- update(m21.4, .~. - (1|observer))
+anova(m21.4, m21.4.r2)
+m21.4.r3 <- update(m21.4, .~. - (1|site))
+anova(m21.4, m21.4.r3)
+
+```
+
+```{r model 22: GLMER: male ~ total.eggs}
+# RESULT: male ~ total.eggs** + (1|nestid)*** + (1|observer)*
+
+m22.1 <- glmer(male ~ total.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m22.1)
+drop1(m22.1, test = "Chisq")
+
+m22.2 <- update(m22.1, .~. - scale(mminutes))
+summary(m22.2)
+drop1(m22.2, test = "Chisq")
+
+m22.3 <- update(m22.2, .~. - scale(nest.density))
+summary(m22.3)
+drop1(m22.3, test = "Chisq")
+
+m22.4 <- update(m22.3, .~. - scale(nestday))
+summary(m22.4)
+
+# testing if random factors have an effect or not.
+m22.4.r1 <- update(m22.4, .~. - (1|nestid))
+anova(m22.4, m22.4.r1)
+m22.4.r2 <- update(m22.4, .~. - (1|observer))
+anova(m22.4, m22.4.r2)
+m22.4.r3 <- update(m22.4, .~. - (1|site))
+anova(m22.4, m22.4.r3)
+
+```
+
+```{r model 23: GLMER: male ~ parasite:total.eggs, eval=FALSE, include=FALSE}
+# RESULT: male ~ parasite NS + (1|nestid)*** + (1|observer)**
+# ERROR: After removing negative nestday data and adding interactions, model fails to converge.
+
+m23.1 <- glmer(male ~ parasite
+               + total.eggs
+               + parasite:total.eggs
+               + scale(mminutes)
+               + parasite:scale(mminutes)
+               + scale(nestday)
+               + parasite:scale(nestday)
+               + scale(nest.density)
+               + parasite:scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m23.1)
+drop1(m23.1, test = "Chisq")
+
+m23.2 <- update(m23.1, .~. - parasite:total.eggs)
+summary(m23.2)
+drop1(m23.2, test = "Chisq")
+
+m23.3 <- update(m23.2, .~. - parasite:scale(nest.density))
+summary(m23.3)
+drop1(m23.3, test = "Chisq")
+
+m23.4 <- update(m23.3, .~. - scale(nest.density))
+summary(m23.4)
+drop1(m23.4, test = "Chisq")
+
+m23.5 <- update(m23.4, .~. - parasite:scale(mminutes))
+summary(m23.5)
+drop1(m23.5, test = "Chisq")
+
+m23.6 <- update(m23.5, .~. - parasite:scale(nestday)) # model failes to converge
+summary(m23.6)
+drop1(m23.6, test = "Chisq")
+
+m23.5 <- update(m23.4, .~. - parasite:scale(mminutes))
+summary(m23.5)
+
+# testing if random factors have an effect or not.
+m23.4.r1 <- update(m23.4, .~. - (1|nestid))
+anova(m23.4, m23.4.r1)
+m23.4.r2 <- update(m23.4, .~. - (1|observer))
+anova(m23.4, m23.4.r2)
+m23.4.r3 <- update(m23.4, .~. - (1|site))
+anova(m23.4, m23.4.r3)
+
+```
+
+```{r model 24: GLMER: male ~ r.cc.eggs}
+# RESULT: male ~ r.cc.eggs NS + (1|nestid)*** + (1|observer)*
+
+m24.1 <- glmer(male ~ r.cc.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df,family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m24.1)
+drop1(m24.1, test = "Chisq")
+
+m24.2 <- update(m24.1, .~. - r.cc.eggs)
+summary(m24.2)
+drop1(m24.2, test = "Chisq")
+
+m24.3 <- update(m24.2, .~. - scale(nest.density))
+summary(m24.3)
+drop1(m24.3, test = "Chisq")
+
+m24.4 <- update(m24.3, .~. - scale(mminutes))
+summary(m24.4)
+
+# testing if random factors have an effect or not.
+m24.4.r1 <- update(m24.4, .~. - (1|nestid))
+anova(m24.4, m24.4.r1)
+m24.4.r2 <- update(m24.4, .~. - (1|observer))
+anova(m24.4, m24.4.r2)
+m24.4.r3 <- update(m24.4, .~. - (1|site))
+anova(m24.4, m24.4.r3)
+
+```
+
+```{r model 25: GLMER: female ~ male}
+# RESULT: female ~ male*** + (1|nestid)***
+# WARNING: Some convergence warnings in drop1.
+
+m25.1 <- glmer(female ~ male
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m25.1)
+drop1(m25.1, test = "Chisq")
+
+m25.2 <- update(m25.1, .~. - scale(nest.density))
+summary(m25.2)
+drop1(m25.2, test = "Chisq")
+
+m25.3 <- update(m25.2, .~. - scale(nestday))
+summary(m25.3)
+drop1(m25.3, test = "Chisq")
+
+m25.4 <- update(m25.3, .~. - scale(mminutes))
+summary(m25.4)
+
+# testing if random factors have an effect or not.
+m25.4.r1 <- update(m25.4, .~. - (1|nestid))
+anova(m25.4, m25.4.r1)
+m25.4.r2 <- update(m25.4, .~. - (1|observer))
+anova(m25.4, m25.4.r2)
+m25.4.r3 <- update(m25.4, .~. - (1|site))
+anova(m25.4, m25.4.r3)
+
+```
+
+```{r model 26: GLMER: parasite ~ pair, eval=FALSE, include=FALSE}
+# WARNING: Lots of warning messeges about Hessian values and convergences, results best not to be trusted.
+# RESULT: parasite ~ pair NS + (1|nestid)***
+
+m26.1 <- glmer(parasite ~ pair
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m26.1)
+drop1(m26.1, test = "Chisq")
+
+m26.2 <- update(m26.1, .~. - scale(nest.density))
+summary(m26.2)
+drop1(m26.2, test = "Chisq")
+
+m26.3 <- update(m26.2, .~. - scale(nestday))
+summary(m26.3)
+drop1(m26.3, test = "Chisq")
+
+m26.4 <- update(m26.3, .~. - scale(j.date))
+summary(m26.4)
+drop1(m26.4, test = "Chisq")
+
+m26.5 <- update(m26.4, .~. - scale(mminutes))
+summary(m26.5)
+
+# testing if random factors have an effect or not.
+m26.5.r1 <- update(m26.5, .~. - (1|nestid))
+anova(m26.5, m26.5.r1)
+m26.5.r2 <- update(m26.5, .~. - (1|observer))
+anova(m26.5, m26.5.r2)
+m26.5.r3 <- update(m26.5, .~. - (1|site))
+anova(m26.5, m26.5.r3)
+
+```
+
+```{r model 27: GLMER: parasite ~ bpair, eval=FALSE, include=FALSE}
+# RESULT: parasite ~ bpair NS + (1|nestid)***
+
+m27.1 <- glmer(parasite ~ bpair
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m27.1)
+drop1(m27.1, test = "Chisq")
+
+m27.2 <- update(m27.1, .~. - scale(nest.density))
+summary(m27.2)
+drop1(m27.2, test = "Chisq")
+
+m27.3 <- update(m27.2, .~. - scale(nestday))
+summary(m27.3)
+drop1(m27.3, test = "Chisq")
+
+m27.4 <- update(m27.3, .~. - scale(mminutes))
+summary(m27.4)
+drop1(m27.4, test = "Chisq")
+
+m27.5 <- update(m27.4, .~. - scale(j.date))
+summary(m27.5)
+
+# testing if random factors have an effect or not.
+m27.5.r1 <- update(m27.5, .~. - (1|nestid))
+anova(m27.5, m27.5.r1)
+m27.5.r2 <- update(m27.5, .~. - (1|observer))
+anova(m27.5, m27.5.r2)
+m27.5.r3 <- update(m27.5, .~. - (1|site))
+anova(m27.5, m27.5.r3)
+
+```
+
+```{r model 28: GLMER: parasite ~ male, eval=FALSE, include=FALSE}
+# RESULT: parasite ~ male NS + (1|nestid)***
+
+m28.1 <- glmer(parasite ~ male
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m28.1)
+drop1(m28.1, test = "Chisq")
+
+m28.2 <- update(m28.1, .~. - scale(nest.density))
+summary(m28.2)
+drop1(m28.2, test = "Chisq")
+
+m28.3 <- update(m28.2, .~. - scale(mminutes))
+summary(m28.3)
+drop1(m28.3, test = "Chisq")
+
+m28.4 <- update(m28.3, .~. - scale(nestday))
+summary(m28.4)
+drop1(m28.4, test = "Chisq")
+
+m28.5 <- update(m28.4, .~. - male)
+summary(m28.5)
+
+# testing if random factors have an effect or not.
+m28.5.r1 <- update(m28.5, .~. - (1|nestid))
+anova(m28.5, m28.5.r1)
+m28.5.r2 <- update(m28.5, .~. - (1|observer))
+anova(m28.5, m28.5.r2)
+m28.5.r3 <- update(m28.5, .~. - (1|site))
+anova(m28.5, m28.5.r3)
+
+```
+
+```{r model 29: GLMER: parasite ~ female, eval=FALSE, include=FALSE}
+# RESULT: parasite ~ female NS + (1|nestid)***
+
+m29.1 <- glmer(parasite ~ female
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m29.1)
+drop1(m29.1, test = "Chisq")
+
+m29.2 <- update(m29.1, .~. - scale(nest.density))
+summary(m29.2)
+drop1(m29.2, test = "Chisq")
+
+m29.3 <- update(m29.2, .~. - scale(nestday))
+summary(m29.3)
+drop1(m29.3, test = "Chisq")
+
+m29.4 <- update(m29.3, .~. - scale(mminutes))
+summary(m29.4)
+drop1(m29.4, test = "Chisq")
+
+m29.5 <- update(m29.4, .~. - scale(j.date))
+summary(m29.5)
+
+# testing if random factors have an effect or not.
+m29.5.r1 <- update(m29.5, .~. - (1|nestid))
+anova(m29.5, m29.5.r1)
+m29.5.r2 <- update(m29.5, .~. - (1|observer))
+anova(m29.5, m29.5.r2)
+m29.5.r3 <- update(m29.5, .~. - (1|site))
+anova(m29.5, m29.5.r3)
+
+```
+
+```{r model 30: GLMER: parasite ~ female + male, eval=FALSE, include=FALSE}
+# RESULT: parasite ~ female NS* + male NS + (1|nestid)***
+
+m30.1 <- glmer(parasite ~ female
+               + male
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m30.1)
+drop1(m30.1, test = "Chisq")
+
+m30.2 <- update(m30.1, .~. - scale(nest.density))
+summary(m30.2)
+drop1(m30.2, test = "Chisq")
+
+m30.3 <- update(m30.2, .~. - scale(nestday))
+summary(m30.3)
+drop1(m30.3, test = "Chisq")
+
+m30.4 <- update(m30.3, .~. - scale(j.date)) # model failes to converge
+summary(m30.4)
+drop1(m30.4, test = "Chisq")
+
+m30.5 <- update(m30.4, .~. - scale(mminutes))
+summary(m30.5)
+drop1(m30.5, test = "Chisq")
+
+m30.6 <- update(m30.5, .~. - male)
+summary(m30.6)
+drop1(m30.6, test = "Chisq")
+
+# testing if random factors have an effect or not.
+m30.6.r1 <- update(m30.6, .~. - (1|nestid))
+anova(m30.6, m30.6.r1)
+m30.6.r2 <- update(m30.6, .~. - (1|observer))
+anova(m30.6, m30.6.r2)
+m30.6.r3 <- update(m30.6, .~. - (1|site))
+anova(m30.6, m30.6.r3)
+
+```
+
+```{r model 31: GLMER: parasite ~ female * male, eval=FALSE, include=FALSE}
+# WARNING: Lots of warning messeges about Hessian values and convergences, results best not to be trusted.
+# RESULT: parasite ~ female * male NS + (1|nestid)***
+
+m31.1 <- glmer(parasite ~ female * male
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "binomial",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m31.1)
+drop1(m31.1, test = "Chisq")
+
+m31.2 <- update(m31.1, .~. - scale(nest.density))
+summary(m31.2)
+drop1(m31.2, test = "Chisq")
+
+m31.3 <- update(m31.2, .~. - scale(j.date))
+summary(m31.3)
+drop1(m31.3, test = "Chisq")
+
+m31.4 <- update(m31.3, .~. - scale(mminutes))
+summary(m31.4)
+drop1(m31.4, test = "Chisq")
+
+m31.5 <- update(m31.4, .~. - scale(nestday))
+summary(m31.5)
+
+# testing if random factors have an effect or not.
+m31.5.r1 <- update(m31.5, .~. - (1|nestid))
+anova(m31.5, m31.5.r1)
+m31.5.r2 <- update(m31.5, .~. - (1|observer))
+anova(m31.5, m31.5.r2)
+m31.5.r3 <- update(m31.5, .~. - (1|site))
+anova(m31.5, m31.5.r3)
+
+```
+
+
+```{r model 32: GLMER: cc.eggs ~ pair, eval=FALSE, include=FALSE}
+# WARNING: Lots of warning messeges about Hessian values and convergences, results best not to be trusted.
+# RESULT: cc.eggs ~ pair NS* + scale(nestday)** + (1|nestid)***
+
+m32.1 <- glmer(cc.eggs ~ pair
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "poisson",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m32.1)
+drop1(m32.1, test = "Chisq")
+
+m32.2 <- update(m32.1, .~. - scale(nest.density))
+summary(m32.2)
+drop1(m32.2, test = "Chisq")
+
+m32.3 <- update(m32.2, .~. - scale(j.date))
+summary(m32.3)
+drop1(m32.3, test = "Chisq")
+
+m32.4 <- update(m32.3, .~. - scale(mminutes))
+summary(m32.4)
+drop1(m32.4, test = "Chisq")
+
+# testing if random factors have an effect or not.
+m32.4.r1 <- update(m32.4, .~. - (1|nestid))
+anova(m32.4, m32.4.r1)
+m32.4.r2 <- update(m32.4, .~. - (1|observer))
+anova(m32.4, m32.4.r2)
+m32.4.r3 <- update(m32.4, .~. - (1|site))
+anova(m32.4, m32.4.r3)
+
+```
+
+```{r model 33: GLMER: cc.eggs ~ bpair, eval=FALSE, include=FALSE}
+# RESULT: cc.eggs ~ bpair** + scale(nestday)** + (1|nestid)***
+
+m33.1 <- glmer(cc.eggs ~ bpair
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "poisson",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m33.1)
+drop1(m33.1, test = "Chisq")
+
+m33.2 <- update(m33.1, .~. - scale(nest.density))
+summary(m33.2)
+drop1(m33.2, test = "Chisq")
+
+m33.3 <- update(m33.2, .~. - scale(j.date))
+summary(m33.3)
+drop1(m33.3, test = "Chisq")
+
+m33.4 <- update(m33.3, .~. - scale(mminutes))
+summary(m33.4)
+drop1(m33.4, test = "Chisq")
+
+# testing if random factors have an effect or not.
+m33.4.r1 <- update(m33.4, .~. - (1|nestid))
+anova(m33.4, m33.4.r1)
+m33.4.r2 <- update(m33.4, .~. - (1|observer))
+anova(m33.4, m33.4.r2)
+m33.4.r3 <- update(m33.4, .~. - (1|site))
+anova(m33.4, m33.4.r3)
+
+```
+
+```{r model 34: GLMER: cc.eggs ~ male, eval=FALSE, include=FALSE}
+# RESULT: cc.eggs ~ male NS + scale(nestday)* + (1|nestid)***
+
+m34.1 <- glmer(cc.eggs ~ male
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "poisson",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m34.1)
+drop1(m34.1, test = "Chisq")
+
+m34.2 <- update(m34.1, .~. - scale(nest.density))
+summary(m34.2)
+drop1(m34.2, test = "Chisq")
+
+m34.3 <- update(m34.2, .~. - male)
+summary(m34.3)
+drop1(m34.3, test = "Chisq")
+
+m34.4 <- update(m34.3, .~. - scale(j.date))
+summary(m34.4)
+drop1(m34.4, test = "Chisq")
+
+m34.5 <- update(m34.4, .~. - scale(mminutes))
+summary(m34.5)
+
+# testing if random factors have an effect or not.
+m34.5.r1 <- update(m34.5, .~. - (1|nestid))
+anova(m34.5, m34.5.r1)
+m34.5.r2 <- update(m34.5, .~. - (1|observer))
+anova(m34.5, m34.5.r2)
+m34.5.r3 <- update(m34.5, .~. - (1|site))
+anova(m34.5, m34.5.r3)
+
+```
+
+```{r model 35: GLMER: cc.eggs ~ female, eval=FALSE, include=FALSE}
+# RESULT: cc.eggs ~ female** + scale(nestday)* + (1|nestid)***
+
+m35.1 <- glmer(cc.eggs ~ female
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "poisson",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m35.1)
+drop1(m35.1, test = "Chisq")
+
+m35.2 <- update(m35.1, .~. - scale(nest.density))
+summary(m35.2)
+drop1(m35.2, test = "Chisq")
+
+m35.3 <- update(m35.2, .~. - scale(j.date))
+summary(m35.3)
+drop1(m35.3, test = "Chisq")
+
+m35.4 <- update(m35.3, .~. - scale(mminutes))
+summary(m35.4)
+
+# testing if random factors have an effect or not.
+m35.4.r1 <- update(m35.4, .~. - (1|nestid))
+anova(m35.4, m35.4.r1)
+m35.4.r2 <- update(m35.4, .~. - (1|observer))
+anova(m35.4, m35.4.r2)
+m35.4.r3 <- update(m35.4, .~. - (1|site))
+anova(m35.4, m35.4.r3)
+
+```
+
+```{r model 36: GLMER: cc.eggs ~ female + male, eval=FALSE, include=FALSE}
+# RESULT: cc.eggs ~ female** + male NS + scale(nestday)** + (1|nestid)***
+
+m36.1 <- glmer(cc.eggs ~ female
+               + male
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "poisson",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m36.1)
+drop1(m36.1, test = "Chisq")
+
+m36.2 <- update(m36.1, .~. - male)
+summary(m36.2)
+drop1(m36.2, test = "Chisq")
+
+m36.3 <- update(m36.2, .~. - scale(nest.density))
+summary(m36.3)
+drop1(m36.3, test = "Chisq")
+
+m36.4 <- update(m36.3, .~. - scale(j.date))
+summary(m36.4)
+drop1(m36.4, test = "Chisq")
+
+m36.5 <- update(m36.4, .~. - scale(mminutes))
+summary(m36.5)
+
+# testing if random factors have an effect or not.
+m36.5.r1 <- update(m36.5, .~. - (1|nestid))
+anova(m36.5, m36.5.r1)
+m36.5.r2 <- update(m36.5, .~. - (1|observer))
+anova(m36.5, m36.5.r2)
+m36.5.r3 <- update(m36.5, .~. - (1|site))
+anova(m36.5, m36.5.r3)
+
+```
+
+```{r model 37: GLMER: cc.eggs ~ female * male, eval=FALSE, include=FALSE}
+# RESULT: cc.eggs ~ female * male NS + scale(nestday)** + (1|nestid)***
+
+m37.1 <- glmer(cc.eggs ~ female * male
+               + scale(j.date)
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(nest.density)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df, family = "poisson",
+               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)), 
+               na.action=na.omit)
+summary(m37.1)
+drop1(m37.1, test = "Chisq")
+
+m37.2 <- update(m37.1, .~. - scale(nest.density))
+summary(m37.2)
+drop1(m37.2, test = "Chisq")
+
+m37.3 <- update(m37.2, .~. - female:male)
+summary(m37.3)
+drop1(m37.3, test = "Chisq")
+
+m37.4 <- update(m37.3, .~. - male)
+summary(m37.4)
+drop1(m37.4, test = "Chisq")
+
+m37.5 <- update(m37.4, .~. - scale(j.date))
+summary(m37.5)
+drop1(m37.5, test = "Chisq")
+
+m37.6 <- update(m37.5, .~. - scale(mminutes))
+summary(m37.6)
+
+# testing if random factors have an effect or not.
+m37.6.r1 <- update(m37.6, .~. - (1|nestid))
+anova(m37.6, m37.6.r1)
+m37.6.r2 <- update(m37.6, .~. - (1|observer))
+anova(m37.6, m37.6.r2)
+m37.6.r3 <- update(m37.6, .~. - (1|site))
+anova(m37.6, m37.6.r3)
+
+```
+
+```{r VIF recipy, eval=FALSE, include=FALSE}
+#sourse: https://github.com/aufrank/R-hacks/blob/master/mer-utils.R
+
+vif.mer <- function (fit) {
+    ## adapted from rms::vif
+
+    v <- vcov(fit)
+    nam <- names(fixef(fit))
+
+    ## exclude intercepts
+    ns <- sum(1 * (nam == "Intercept" | nam == "(Intercept)"))
+    if (ns > 0) {
+        v <- v[-(1:ns), -(1:ns), drop = FALSE]
+        nam <- nam[-(1:ns)]
+    }
+
+    d <- diag(v)^0.5
+    v <- diag(solve(v/(d %o% d)))
+    names(v) <- nam
+    v
+}
+
+```
+
+```{r VIFs}
+
+vif.mer(m16.1)
+vif.mer(m16.2)
+
+vif.mer(m17.1)
+vif.mer(m17.6)
+
+vif.mer(m18.1)
+vif.mer(m18.4)
+
+vif.mer(m22.1)
+vif.mer(m22.4)
+
+vif.mer(m24.1)
+vif.mer(m24.4)
+
+vif.mer(m25.1)
+vif.mer(m25.4)
+
+```
+
+
+```{r, eval=FALSE, include=FALSE}
+
+
+mean(df$total.eggs[df$female > 0 & df$j.date == 137])
+mean(df$total.eggs[df$female == 0 & df$j.date == 137])
+
+mean(df$total.eggs[df$male > 0 & df$nestday == 3])
+mean(df$total.eggs[df$male == 0 & df$nestday == 3])
+
+mean(df$total.eggs[df$bpair > 0 & df$nestday == 3])
+mean(df$total.eggs[df$bpair == 0 & df$nestday == 3])
+
+var.test(df$total.eggs[df$female > 0], df$total.eggs[df$female == 0])
+var.test(df$total.eggs[df$male > 0], df$total.eggs[df$male == 0])
+var.test(df$total.eggs[df$bpair > 0], df$total.eggs[df$bpair == 0])
+
+t.test(df$total.eggs[df$female > 0 & df$nestday ==3],
+       df$total.eggs[df$female == 0 & df$nestday ==3], var.equal = F)
+t.test(df$total.eggs[df$male > 0 & df$nestday ==3],
+       df$total.eggs[df$male == 0 & df$nestday ==3], var.equal = F)
+t.test(df$total.eggs[df$bpair > 0 & df$nestday ==3], 
+       df$total.eggs[df$bpair == 0 & df$nestday ==3], var.equal = F)
+
+
+
+```
+
+```{r plot recept, eval=FALSE, include=FALSE}
+
+#plots
+### sex x exploration interaction plot
+fe <- fixef(ps.m8)
+ilogit <- function(x) {1/(1+exp(-x))}
+newexpM <- seq(min(scale(ps$exploration[ps$sex=="1"])), 
+                 max(scale(ps$exploration[ps$sex=="1"])), 0.01)
+realexpM <- newexpM * sd(ps$exploration[ps$sex=="1"]) + mean(ps$exploration[ps$sex=="1"])
+newexpF <- seq(min(scale(ps$exploration[ps$sex=="2"])), 
+                  max(scale(ps$exploration[ps$sex=="2"])), 0.01)
+realexpF <- newexpF * sd(ps$exploration[ps$sex=="2"]) + mean(ps$exploration[ps$sex=="2"])
+
+psM <- fe["(Intercept)"] + fe["scale(exploration)"] * newexpM
+psF <- (fe["(Intercept)"] + fe["sex2"]) + (fe["scale(exploration)"] + fe["sex2:scale(exploration)"]) * newexpF
+
+par(mar=c(5, 5, 2, 2))
+plot(ps ~ exploration, data=ps, subset=sex=="1", 
+     cex=2, pch=1, col="black", 
+     #xlim=c(0, 0.6), 
+     xlab="Exploration", 
+     ylab="Probability of scrounging", 
+     cex.lab=1.5)
+points(ps ~ exploration, data=ps, subset=sex=="2", cex=2, pch=16, col="black")
+lines(realexpM, ilogit(psM), lty=1, lwd=4, col="black")
+lines(realexpF, ilogit(psF), lty=2, lwd=4, col="black")
+legend("bottomright", c("M", "F"), pch=c(1, 16), col=c("black", "black"), pt.cex=1.5, cex=1.2, bty="n", ncol=2)
+
+```
+
