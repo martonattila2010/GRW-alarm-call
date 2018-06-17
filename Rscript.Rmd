@@ -306,7 +306,9 @@ summary(m2.6)
 
 ```{r}
 
-m3.1 <- glm(playback.grwf ~ total.eggs
+m3.1 <- glmer(parasite ~ playback.grwf
+              + playback.grwm
+              + total.eggs
               + scale(mminutes)
               + scale(nestday)
               + scale(j.date)
@@ -317,9 +319,13 @@ m3.1 <- glm(playback.grwf ~ total.eggs
               + (1|site),
               data = df, family = "binomial",
               control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)),
-              na.action = na.omit              )
+              na.action = na.omit)
 summary(m3.1)
-drop1(m3.1, test = "Chisq")
+
+m3.2 <- update(m3.1, .~. - scale(j.date) - scale(mminutes) - scale(laying.date)
+               - boots.grwf - boots.grwm)
+summary(m3.2)
+
 ```
 
 
