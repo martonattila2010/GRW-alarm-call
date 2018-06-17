@@ -241,8 +241,8 @@ m1.1 <- glmer(boots.grwf ~ total.eggs
                + (1|site)
                ,
                data=df, family = "binomial",
-               control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)),
-               na.action=na.omit)
+               control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)),
+               na.action = na.omit)
 summary(m1.1)
 drop1(m1.1, test = "Chisq")
 
@@ -267,6 +267,42 @@ summary(m1.6)
 
 ```
 
+```{r}
+
+m2.1 <- glmer(boots.grwm ~ total.eggs
+              + scale(mminutes)
+              + scale(nestday)
+              + scale(j.date)
+              + scale(laying.date)
+              + parasite
+              + (1|nestid)
+              + (1|observer)
+              + (1|site),
+              data = df, family = "binomial",
+              control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)),
+              na.action = na.omit              )
+summary(m2.1)
+drop1(m2.1, test = "Chisq")
+
+m2.2 <- update(m2.1, .~. - scale(mminutes))
+summary(m2.2)
+drop1(m2.2, test = "Chisq")
+
+m2.3 <- update(m2.2, .~. - scale(nestday))
+summary(m2.3)
+drop1(m2.3, test = "Chisq")
+
+m2.4 <- update(m2.3, .~. - parasite)
+summary(m2.4)
+drop1(m2.4, test = "Chisq")
+
+m2.5 <- update(m2.4, .~. - scale(laying.date))
+summary(m2.5)
+
+m2.6 <- update(m2.5, .~. - scale(j.date))
+summary(m2.6)
+
+```
 
 
 
