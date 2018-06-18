@@ -172,20 +172,35 @@ df$pair <- as.factor(df$pair)
 df$bpair[df$pair == "0"] <- 0
 df$bpair[df$pair != "0"] <- 1
 
-# merging during.ccm with after.ccm
-## needs improovement
+# merging during.ccm with after.ccm and during.ccf with after.ccf
 
 df$response.ccm <- NA
 
 for (i in 1:length(df$response.ccm)) {
   
-  if (df[during.ccm] > df[after.ccm]) {
-    df[responce.ccm] == df[during.ccm]
-  } else {
-      df[response.ccm] == df[after.ccm]
-  }
+    if (!is.na(df$during.ccm[i])) {
+        if (df$during.ccm[i] > df$after.ccm[i]) {
+            df$response.ccm[i] <- df$during.ccm[i]
+        } else {
+            df$response.ccm[i] <- df$after.ccm[i]
+        }
+    }
+
+}
+
+df$response.ccf <- NA
+
+for (i in 1:length(df$response.ccf)) {
   
-  }
+    if (!is.na(df$during.ccf[i])) {
+        if (df$during.ccf[i] > df$after.ccf[i]) {
+            df$response.ccf[i] <- df$during.ccf[i]
+        } else {
+            df$response.ccf[i] <- df$after.ccf[i]
+        }
+    }
+
+}
 
 
 ```
