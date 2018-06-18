@@ -69,68 +69,82 @@ library(lme4)
 
 ```{r dataset and variable setup, echo=TRUE}
 
-setwd("C:/Users/Marton Attila/OneDrive/PhD/1. GRW alarm vs CC parasitism/2018")
+# setting up work directory
+
+setwd("C:/Users/Marton Attila/OneDrive/PhD/GRW-alarm-call")
 
 df <- read.csv("DFx2b.csv", header = T, sep = ";")
 summary(df)
 
 # converting nestid, year, site and observer to factor
+
 df$nestid <- as.factor(df$nestid)
 df$year <- as.factor(df$year)
 df$site <- as.factor(df$site)
 df$observer <- as.factor(df$observer)
 
-# converting date to julian date in column j.date using pachage chron 
+# converting date to julian date in column j.date using pachage chron
+
 df$date <- as.Date(df$date, format = '%Y.%m.%d')
+
 df$j.date[df$year == "2013"] <- julian(df$date[df$year == "2013"], origin = as.Date("2013-01-01"), units = "days")
+
 df$j.date[df$year == "2014"] <- julian(df$date[df$year == "2014"], origin = as.Date("2014-01-01"), units = "days")
+
 df$j.date[df$year == "2018"] <- julian(df$date[df$year == "2018"], origin = as.Date("2018-01-01"), units = "days")
 
+# converting laying date to julian date in column j.laying.date
+
+df$laying.date <- as.Date(df$laying.date, format = "%Y.%m.%d")
+
+df$j.laying.date[df$year == "2013"] <- julian(df$laying.date[df$year == "2013"], origin = as.Date("2013-01-01"))
+
+df$j.laying.date[df$year == "2014"] <- julian(df$laying.date[df$year == "2014"], origin = as.Date("2014-01-01"))
+
+df$j.laying.date[df$year == "2018"] <- julian(df$laying.date[df$year == "2018"], origin = as.Date("2018-01-01"))
+
+# adding column nestday by subtracting j.date from j.laying.date
+
+df$nestday <- df$j.date - df$j.laying.date
+
 # converting time to minutes from midnight in column mminutes
+
 df$time <- as.character(df$time)
 df$time2 <- paste(df$time, ":00", sep = "")
 df$time2[df$time2 == "NA:00"] <- NA
 df$mminutes <- 60*24*as.numeric(times(df$time2))
 
 # adding column parasite 
+
 df$parasite[df$cc.eggs == "0"] <- 0
 df$parasite[df$cc.eggs > "0"] <- 1
 df$parasite <- as.factor(df$parasite)
 
-# converting laying date to julian date in column j.laying.date
-# adding column nestday by subtracting j.date from j.laying.date
-df$laying.date <- as.Date(df$laying.date, format = "%Y.%m.%d")
-df$j.laying.date[df$year == "2013"] <- julian(df$laying.date[df$year == "2013"], origin = as.Date("2013-01-01"))
-df$j.laying.date[df$year == "2014"] <- julian(df$laying.date[df$year == "2014"], origin = as.Date("2014-01-01"))
-df$j.laying.date[df$year == "2018"] <- julian(df$laying.date[df$year == "2018"], origin = as.Date("2018-01-01"))
-
-df$nestday <- df$j.date - df$j.laying.date
-
 # we had some concernes regarding the correct identification of class 1 alarm calls, so we made some histograms with the observers. It turns out GN probably cannot reliably identify class 1 alarm calls, which is not surprising, due to the ambiguity of the class 1. We decided to drop class 1 alarm calls from all further analyses. Thus, we have a new binomial variable: "0" is no alarm, "1" is (strong) alarm call.
 
 par(mfrow=c(1,2))
-hist(df$boots.grwm)
-hist(df$boots.grwf)
+hist(df$boots.grwm, main = "Hist of boots.grwm by all obs")
+hist(df$boots.grwf, main = "Hist of boots.grwf by all obs")
 
 par(mfrow=c(1,2))
-hist(df$boots.grwm[df$observer == "ZSI"])
-hist(df$boots.grwf[df$observer == "ZSI"])
+hist(df$boots.grwm[df$observer == "ZSI"], main = "Hist of boots.grwm by ZSI")
+hist(df$boots.grwf[df$observer == "ZSI"], main = "Hist of boots.grwf by ZSI")
 
 par(mfrow=c(1,2))
-hist(df$boots.grwm[df$observer == "BM"])
-hist(df$boots.grwf[df$observer == "BM"])
+hist(df$boots.grwm[df$observer == "BM"], main = "Hist of boots.grwm by BM")
+hist(df$boots.grwf[df$observer == "BM"], main = "Hist of boots.grwf by BM")
 
 par(mfrow=c(1,2))
-hist(df$boots.grwm[df$observer == "BM, MA"])
-hist(df$boots.grwf[df$observer == "BM, MA"])
+hist(df$boots.grwm[df$observer == "BM, MA"], main = "Hist of boots.grwm by BM, MA")
+hist(df$boots.grwf[df$observer == "BM, MA"], main = "Hist of boots.grwf by BM, MA")
 
 par(mfrow=c(1,2))
-hist(df$boots.grwm[df$observer == "MA"])
-hist(df$boots.grwf[df$observer == "MA"])
+hist(df$boots.grwm[df$observer == "MA"], main = "Hist of boots.grwm by MA")
+hist(df$boots.grwf[df$observer == "MA"], main = "Hist of boots.grwf by MA")
 
-par(mfrow=c(1,2))
-hist(df$boots.grwm[df$observer == "GN"])
-hist(df$boots.grwf[df$observer == "GN"])
+par(mfrow = c(1,2))
+hist(df$boots.grwm[df$observer == "GN"], main = "Hist of boots.grwm by GN")
+hist(df$boots.grwf[df$observer == "GN"], main = "Hist of boots.grwf by GN")
 
 dev.off()
 
@@ -143,6 +157,11 @@ df$boots.grwm[df$boots.grwm == "0"] <- 0
 df$boots.grwm[df$boots.grwm == "1"] <- NA
 df$boots.grwm[df$boots.grwm == "2"] <- 1
 
+par(mfrow = c(1,2))
+hist(df$boots.grwf, main = "Binomial boots.grwf")
+hist(df$boots.grwm, main = "Binomial boots.grwm")
+dev.off()
+
 df$pair[df$boots.grwm == "0" & df$boots.grwf == "0"] <- 0
 df$pair[df$boots.grwm == "1" & df$boots.grwf == "0"] <- 1
 df$pair[df$boots.grwm == "0" & df$boots.grwf == "1"] <- 2
@@ -152,6 +171,22 @@ df$pair <- as.factor(df$pair)
 # adding column bpair
 df$bpair[df$pair == "0"] <- 0
 df$bpair[df$pair != "0"] <- 1
+
+# merging during.ccm with after.ccm
+## needs improovement
+
+df$response.ccm <- NA
+
+for (i in 1:length(df$response.ccm)) {
+  
+  if (df[during.ccm] > df[after.ccm]) {
+    df[responce.ccm] == df[during.ccm]
+  } else {
+      df[response.ccm] == df[after.ccm]
+  }
+  
+  }
+
 
 ```
 
@@ -233,6 +268,15 @@ sd(sumvisit$multiple.sum)
 (length(unique(df.rep$nestid))*100)/length(unique(df$nestid))
 
 ```
+
+```{r cor.test between boots.grw and playback.grw}
+
+df.cor <- df[!is.na(df$playback.grwf),]
+
+cor.test(df.cor$boots.grwf, df.cor$playback.grwf, method = "pearson")
+
+```
+
 
 ```{r GRW alarm call probability to observers correlates to clutch size}
 
