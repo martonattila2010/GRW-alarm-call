@@ -1,0 +1,52 @@
+README
+
+---
+title: "Great Reed Warbler alarm call attracts brood parasites"
+author: "Attila Marton, Attila Fülöp, Csaba Moskát, Miklós Bán"
+date: '2018 június 7 '
+output: html_document
+---
+
+Files:
+
+DFx2b.csv contains  (1) great reed warbler (Acrocephalus arundinaceus, GRW from hereafter) nest checking data from 2013, 2014 and 2018, 
+                    (2) great reed warbler nest characteristics from 2018
+                    (3) male and female great reed warbler alarm call intensity data to observer and to dummy plastic cuckoo from 2018
+                    (4) male and female common cuckoo (Cuculus canorus CC from hereafter) reactions to GRW alarm call from 2018. All experiment were performed near Apaj village, central Hungary.
+                    
+- Columns:
+-- nestid: a concatenated id showing the number of given nest in given year and the year
+-- id: the id number of given nest within given year
+-- year: the year of the study
+-- date: format yyyy.mm.dd
+-- site: name of channel (Arapaszto, Apaj, DVCS, Kunszentmiklos)
+-- grw.eggs: number of great reed warbler eggs at the time of visit
+-- cc.eggs: number of common cuckoo eggs at the time of visit
+-- total.eggs: grw.eggs + cc.eggs
+-- pull: 1 if chicks hatched at the time of visit
+-- abandoned: 1 if nest was deemed abandoned at the time of visit
+-- laying.date: the presumed laying date of the first egg
+-- observer: initials of observers
+-- exp: 0 = nest checking, 1 = small clutch, 2 = full clutch, 3 = drone flight
+-- boots.grwm: male GRW response to man in boots (0 = none, 1 = weak alarm call, 2 = strong alarm call)
+-- boots.grwf: female GRW response to man in boots (0 = none, 1 = weak alarm call, 2 = strong alarm call)
+-- playback.grwm: male GRW response to plastic cuckoo dummy during GRW alarm call playback (0 = none, 1 = weak alarm call, 2 = strong alarm call, 3 = contact fight)
+-- playback.grwf: female GRW response to plastic cuckoo dummy during GRW alarm call playback (0 = none, 1 = weak alarm call, 2 = strong alarm call, 3 = contact fight)
+-- before.ccm: male CC presence near the nest before GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- before.ccf: female CC presence near the nest before GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- during.ccm: male CC reaction near the nest to GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- during.ccf: female CC reaction near the nest to GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- after.ccm: male CC reaction near the nest after GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- after.ccf: female CC reaction near the nest after GRW alarm call playback or natural GRW alarm call (0 = none, 1 = calling, 2 = flying closer, 3 = flying closer and vocalizing intensively)
+-- pamela: 1 if dummy plastic cuckoo was used
+-- alarm.file: the name of the alarm file used
+-- record: if GRW reaction was recorded or not
+-- obs: any observation related to the nest visit
+-- nest.height: the height of the nest in cm
+-- nest.width: the width of the nest at the top in cm
+-- dist.water: distance of nest from water in cm
+-- dist.bank: distance of nest from the bank in cm
+-- above.water: distance between water and the top of the nest in cm
+-- above.nest: distance from the top of the nest and the top of the vegetation in cm
+-- visibility: direct nest view (DNV), indirect nest view (INV), no nest view (NNW) from the nest to the nearest perching tree
+-- perch.dist: distance in m to the nearest perching tree
