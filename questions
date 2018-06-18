@@ -1,0 +1,18 @@
+
+Questions and proposed models
+
+COR1: Do louder GRWs get parasited more often?
+- Does a correlation exist between the reaction of GRW males and females to observer (boots.grwm and boots.grwf) and the binomial probability of beeing parasited?
+- We use boots.grw instead of playback because we have more data for this variable from 2013, 2014, 2018.
+- Since the variable parasite is binomial, we will use a glmer with binomial distribution
+
+parasite  ~ boots.grw
+          + total.eggs
+          + j.date
+          + j.laying.date
+          + mminutes
+          + nestday
+          + (1|site)
+          + (1|observer)
+          + (1|nestid)
+          

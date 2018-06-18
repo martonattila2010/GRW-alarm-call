@@ -61,7 +61,7 @@ library(beepr)
 library(Matrix)
 library(lme4)
 #library(nlme)
-#library(ordinal)
+library(ordinal)
 #library(car)
 #library(rgdal)
 #library(geosphere)
@@ -172,7 +172,7 @@ df$pair <- as.factor(df$pair)
 df$bpair[df$pair == "0"] <- 0
 df$bpair[df$pair != "0"] <- 1
 
-# merging during.ccm with after.ccm and during.ccf with after.ccf
+# merging during.ccm with after.ccm in response. ccm
 
 df$response.ccm <- NA
 
@@ -187,6 +187,8 @@ for (i in 1:length(df$response.ccm)) {
     }
 
 }
+
+# merging during.ccf with after.ccf in response.ccf
 
 df$response.ccf <- NA
 
@@ -288,7 +290,7 @@ sd(sumvisit$multiple.sum)
 
 df.cor <- df[!is.na(df$playback.grwf),]
 
-cor.test(df.cor$boots.grwf, df.cor$playback.grwf, method = "pearson")
+cor.test(df.cor$boots.grwf, df.cor$playback.grwf, method = "spearman")
 
 ```
 
@@ -371,25 +373,27 @@ summary(m2.6)
 
 ```{r}
 
-m3.1 <- glmer(parasite ~ playback.grwf
-              + playback.grwm
-              + total.eggs
-              + scale(mminutes)
-              + scale(nestday)
-              + scale(j.date)
-              + scale(laying.date)
-              + parasite
-              + (1|nestid)
-              + (1|observer)
-              + (1|site),
-              data = df, family = "binomial",
-              control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)),
-              na.action = na.omit)
-summary(m3.1)
+as.factor(df$playback.grwf)
+as.factor(df$playback.grwm)
+df.exp1 <- df[!is.na(df$playback.grwf),]
 
-m3.2 <- update(m3.1, .~. - scale(j.date) - scale(mminutes) - scale(laying.date)
-               - boots.grwf - boots.grwm)
-summary(m3.2)
+m3.1 <- clmm(playback.grwf ~ total.eggs
+             + parasite
+             + scale(mminutes)
+             + scale(nestday)
+             + scale(j.date)
+             + scale(laying.date)
+             + (1|nestid)
+             + (1|site)
+             + (1|observer),
+             data=df.exp1,
+             control = list(method = "nlminb",
+                            maxIter = 1e6, 
+                            grtol=5e-4),
+             na.action=na.omit)
+
+summary(m1.1)
+drop1(m1.1, test = "Chisq")
 
 ```
 
