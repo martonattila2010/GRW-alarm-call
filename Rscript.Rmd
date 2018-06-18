@@ -152,6 +152,7 @@ df$pair <- as.factor(df$pair)
 # adding column bpair
 df$bpair[df$pair == "0"] <- 0
 df$bpair[df$pair != "0"] <- 1
+
 ```
 
 ```{r subseting and removing NAs}
@@ -171,11 +172,14 @@ df <- df.full
 
 df <- subset(df, mminutes >= 360 & mminutes <= 720 | mminutes >= 1000 )
 
-#df1 <- subset(df, mminutes >= 360 & mminutes <= 720)
-#df2 <- subset(df, mminutes >=1000)
-#df3 <- rbind(df1, df2)
-
-# 720 = 12:00, 660 = 11:00, 360 = 6:00, 1000 = 16:40, 1020 = 17:00, 1080 = 18:00, 1140 = 19:00
+# Time conversions:
+# 360 = 06:00
+# 720 = 12:00
+# 660 = 11:00
+# 1000 = 16:40
+# 1020 = 17:00
+# 1080 = 18:00
+# 1140 = 19:00
 
 #df <- df[df$observer != "ZA",]
 #df <- df[df$year != "2014",]
@@ -183,6 +187,7 @@ df <- subset(df, mminutes >= 360 & mminutes <= 720 | mminutes >= 1000 )
 #df <- subset(df, nestday > 0) # removing negative nestday values
 df <- subset(df, pull = 1 ) # removing nests with pull
 df <- subset(df, abandoned = 1) # removing abandoned nests
+
 ```
 
 ```{r exploratory analyses on df}
@@ -190,6 +195,7 @@ df <- subset(df, abandoned = 1) # removing abandoned nests
 head(df)
 summary(df)
 str(df)
+
 ```
 
 ```{r repeatability of alarm call}
