@@ -1,0 +1,56 @@
+Variable setup
+
+nestid        = factor
+id            = int
+year          = factor
+date          = date
+j.date        = num
+time          = chron
+time2         = chron
+mminutes      = num
+site          = factor
+grw.eggs      = int
+cc.egg        = int
+total.eggs    = int (grw.eggs + total.eggs)
+parasite      = int / factor
+pull          = int / factor
+abandoned     = int / factor
+laying.date   = date
+j.laying.date = num
+nestday       = num (j.date - j.laying.date)
+observer      = factor
+exp           = int / factor
+boots.grwf    = int
+f.boots.grwf  = factor
+boots.grwm    = int
+f.boots.grwf  = factor
+playback.grwf = factor
+playback.grwm = factor
+pair          = factor
+bpair         = num
+before.ccm    = factor
+before.ccf    = factor
+during.ccm    = factor
+during.ccf    = factor
+after.ccm     = factor
+after.ccf     = factor
+response.ccm  = factor (during.ccm + after.ccm)
+response.ccf  = factor (during.ccf + after.ccf)
+nest.hight    = int
+nest.width    = int
+dist.water    = int
+dist.bank     = int
+above.water   = int
+above.nest    = int
+visibility    = factor
+perch.dist    = int
+
+
+
+
+
+session         = non-relevant
+pamela.present  = non-relevant
+alarm.file      = non-relevant
+record          = non-relevant
+obs             = non-relevant
