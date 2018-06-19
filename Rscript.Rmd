@@ -236,7 +236,7 @@ df <- df.full
 
 df <- subset(df, pull != 1 ) # removing nests with pull
 df <- subset(df, abandoned != 1) # removing abandoned nests
-df <- subset(df, nestday > 0) # removing negative nestday values
+#df <- subset(df, nestday > 0) # removing negative nestday values
 
 # removing NAs
 df <- df[!is.na(df$parasite),]
@@ -320,9 +320,7 @@ cor.test(df.cor$boots.grwf, df.cor$playback.grwf,
 
 ```
 
-```{r glmer-b: b.boots.grw}
-
-# RESULT: b.boots.grwf ~ parasite1** + total.eggs*** + parasite1:total.eggs***
+```{r glmer-b: b.boots.grwf}
 
 m1.1 <- glmer(b.boots.grwf ~ parasite
               + total.eggs
@@ -493,7 +491,7 @@ drop1(m1.4.p1, test = "Chisq")
 
 ```
 
-```{r glmer-p: boots.grw}
+```{r glmer-p: boots.grwf}
 
 m2.1 <- glmer(boots.grwf ~ parasite
               + total.eggs
@@ -713,44 +711,179 @@ m4.5.r3 <- update(m4.5, .~. - (1|site))
 anova(m4.5, m4.5.r3)
 ```
 
-```{r}
+```{r glmer-b: b.boots.grwm}
 
-m2.1 <- glmer(boots.grwm ~ total.eggs
+
+m5.1 <- glmer(b.boots.grwm ~ parasite
+              + total.eggs
+              + parasite:total.eggs
               + scale(mminutes)
+              + parasite:scale(mminutes)
               + scale(nestday)
+              + parasite:scale(nestday)
               + scale(j.date)
-              + scale(laying.date)
-              + parasite
+              + parasite:scale(j.date)
               + (1|nestid)
               + (1|observer)
-              + (1|site),
-              data = df, family = "binomial",
-              control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)),
-              na.action = na.omit              )
-summary(m2.1)
-drop1(m2.1, test = "Chisq")
+              + (1|site)
+              ,
+              data=df, family = "binomial",
+              control = glmerControl(optimizer = "bobyqa",
+                        optCtrl = list(maxfun = 2e5)),
+              na.action = na.omit)
+summary(m5.1)
+drop1(m5.1, test = "Chisq")
+beep(4)
 
-m2.2 <- update(m2.1, .~. - scale(mminutes))
-summary(m2.2)
-drop1(m2.2, test = "Chisq")
+m5.2 <- update(m5.1, .~. - parasite:scale(nestday))   
+summary(m5.2)
+drop1(m5.2, test = "Chisq")
+beep(4)
 
-m2.3 <- update(m2.2, .~. - scale(nestday))
-summary(m2.3)
-drop1(m2.3, test = "Chisq")
+m5.3 <- update(m5.2, .~. - scale(nestday))
+summary(m5.3)
+drop1(m5.3, test = "Chisq")
+beep(4)
 
-m2.4 <- update(m2.3, .~. - parasite)
-summary(m2.4)
-drop1(m2.4, test = "Chisq")
+m5.4 <- update(m5.3, .~. - parasite:scale(j.date))
+summary(m5.4)
+drop1(m5.4, test = "Chisq")
+beep(4)
 
-m2.5 <- update(m2.4, .~. - scale(laying.date))
-summary(m2.5)
+m5.5 <- update(m5.4, .~. - scale(j.date))
+summary(m5.5)
+drop1(m5.5, test = "Chisq")
+beep(4)
 
-m2.6 <- update(m2.5, .~. - scale(j.date))
-summary(m2.6)
+m5.6 <- update(m5.5, .~. - scale(nestday))
+summary(m5.6)
+drop1(m5.6, test = "Chisq")
+beep(4)
+
+m5.7 <- update(m5.6, .~. - scale(mminutes))
+summary(m5.7)
+drop1(m5.7, test = "Chisq")
+beep(4)
+
+# testing the potential effect of random factors
+m5.7.r1 <- update(m5.7, .~. - (1|nestid))
+anova(m5.7, m5.7.r1)
+m5.7.r2 <- update(m5.7, .~. - (1|observer))
+anova(m5.7, m5.7.r2)
+m5.7.r3 <- update(m5.7, .~. - (1|site))
+anova(m5.7, m5.7.r3)
+
+#plot from Attila Fulop
+#plot female
+
+
+fe <- fixef(m5.7)
+ilogit <- function(x) {1/(1+exp(-x))}
+newNDp0 <- seq(min(df$total.eggs[df$parasite=="0"]), 
+               max(df$total.eggs[df$parasite=="0"]), 0.01)
+
+realNDp0 <- newNDp0 * sd(df$total.eggs[df$parasite=="0"]) + mean(df$total.eggs[df$parasite=="0"])
+
+newNDp1 <- seq(min(df$total.eggs[df$parasite=="1"]), 
+               max(df$total.eggs[df$parasite=="1"]), 0.01)
+
+realNDp1 <- newNDp1 * sd(df$total.eggs[df$parasite=="1"]) + mean(df$total.eggs[df$parasite=="1"])
+
+p0 <- fe["(Intercept)"] + fe["total.eggs"] * newNDp0
+p1 <- (fe["(Intercept)"] + fe["parasite1"]) + (fe["total.eggs"] + fe["parasite1:total.eggs"]) * newNDp1
+
+par(mar=c(5, 5, 2, 2))
+plot(b.boots.grwf ~ total.eggs, data=df, subset=parasite=="0",
+     #type = 'n',
+     cex=1.5, pch=1, col="darkblue", 
+     xlim=c(0, 17),
+     xlab="Clutch size", 
+     ylab="Probability of female alarm call", 
+     cex.lab=1)
+points(boots.grwf ~ total.eggs, data=df, subset=parasite=="1",
+     cex=1.5, pch=4, col="darkred")
+lines(realNDp0, ilogit(p0), lty=1, lwd=3, col="darkblue")
+lines(realNDp1, ilogit(p1), lty=2, lwd=3, col="darkred")
+legend(x = 1, y = 0.3, c("non-parasitized", "parasitized"), pch=c(1, 4), col=c("darkblue", "darkred"), pt.cex=1, cex=1, bty="n", ncol=1)
+
+# splitting the dataset in two subset to see if the different parasite-nestday relationships are significant and calculating number of nests, mean and SD for both cases
+
+df.p0 <- df[df$parasite == 0,]
+df.p1 <- df[df$parasite != 0,]
+
+sumvisit.p0 <- summaryBy(multiple ~ nestid, data = df.p0, FUN = c(sum))
+length(unique(df.p0$nestid))
+mean(sumvisit.p0$multiple.sum)
+sd(sumvisit.p0$multiple.sum)
+
+sumvisit.p1 <- summaryBy(multiple ~ nestid, data = df.p1, FUN = c(sum))
+length(unique(df.p1$nestid))
+mean(sumvisit.p1$multiple.sum)
+sd(sumvisit.p1$multiple.sum)
+
+# sub-model with df$parasite == 0
+# RESULT: female ~ total.eggs**
+
+m5.1.p0 <- glmer(b.boots.grwf ~ total.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(j.date)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df.p0,family = "binomial",
+               control=glmerControl(optimizer="bobyqa",     
+               optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m5.1.p0)
+drop1(m5.1.p0, test = "Chisq")
+
+m5.2.p0 <- update(m5.1.p0, .~. - scale(nestday))
+summary(m5.2.p0)
+drop1(m5.2.p0, test = "Chisq")
+
+m5.3.p0 <- update(m5.2.p0, .~. - scale(j.date))
+summary(m5.3.p0)
+drop1(m5.3.p0, test = "Chisq")
+
+m5.4.p0 <- update(m5.3.p0, .~. - scale(mminutes))
+summary(m5.4.p0)
+drop1(m5.4.p0, test = "Chisq")
+
+# sub-model with df$parasite == 1
+# Result: female ~ total.eggs NS* - scale(nestday)*
+
+m5.1.p1 <- glmer(b.boots.grwf ~ total.eggs
+               + scale(mminutes)
+               + scale(nestday)
+               + scale(j.date)
+               + (1|nestid)
+               + (1|observer)
+               + (1|site)
+               ,
+               data=df.p1,family = "binomial",
+               control=glmerControl(optimizer="bobyqa",
+               optCtrl=list(maxfun=2e5)),
+               na.action=na.omit)
+summary(m5.1.p1)
+drop1(m5.1.p1, test = "Chisq")
+
+m5.2.p1 <- update(m5.1.p1, .~. - scale(nestday))
+summary(m5.2.p1)
+drop1(m5.2.p1, test = "Chisq")
+
+m5.3.p1 <- update(m5.2.p1, .~. - total.eggs)
+summary(m5.3.p1)
+drop1(m5.3.p1, test = "Chisq")
+
+m5.4.p1 <- update(m5.3.p1, .~. - scale(mminutes))
+summary(m5.4.p1)
+drop1(m5.4.p1, test = "Chisq")
 
 ```
 
-```{r}
+```{r glmer-p: boots.grwm}
 
 df$boots.grwm <- as.factor(df$boots.grwm)
 df.exp1 <- df[!is.na(df$boots.grwf),]
@@ -775,7 +908,7 @@ drop1(m1.1, test = "Chisq")
 
 ```
 
-```{r}
+```{r clmm: f.boots.grwm}
 
 m4 <- glmer(parasite ~ boots.grwf
           + total.eggs
