@@ -80,10 +80,22 @@ summary(df)
 
 # converting nestid, year, site and observer to factor
 
-df$nestid <- as.factor(df$nestid)
-df$year <- as.factor(df$year)
-df$site <- as.factor(df$site)
-df$observer <- as.factor(df$observer)
+df$nestid         <- as.factor(df$nestid)
+df$year           <- as.factor(df$year)
+df$site           <- as.factor(df$site)
+df$observer       <- as.factor(df$observer)
+df$f.boots.grwf   <- as.factor(df$boots.grwf)
+df$f.boots.grwm   <- as.factor(df$boots.grwm)
+df$playback.grwf  <- as.factor(df$playback.grwf)
+df$playback.grwm  <- as.factor(df$playback.grwm)
+df$before.ccm     <- as.factor(df$before.ccm)
+df$before.ccf     <- as.factor(df$before.ccf)
+df$during.ccm     <- as.factor(df$during.ccm)
+df$during.ccf     <- as.factor(df$during.ccf)
+df$after.ccm      <- as.factor(df$after.ccm)
+df$after.ccf      <- as.factor(df$after.ccf)
+df$response.ccm   <- as.factor(df$response.ccm)
+df$response.ccf   <- as.factor(df$response.ccf)
 
 # converting date to julian date in column j.date using pachage chron
 
@@ -151,17 +163,20 @@ hist(df$boots.grwf[df$observer == "GN"], main = "Hist of boots.grwf by GN")
 dev.off()
 
 # removing class 1 and converting class 2 to class 1
-df$boots.grwf[df$boots.grwf == "0"] <- 0
-df$boots.grwf[df$boots.grwf == "1"] <- NA
-df$boots.grwf[df$boots.grwf == "2"] <- 1
+df$b.boots.grwf <- NA
+df$b.boots.grwm <- NA
 
-df$boots.grwm[df$boots.grwm == "0"] <- 0
-df$boots.grwm[df$boots.grwm == "1"] <- NA
-df$boots.grwm[df$boots.grwm == "2"] <- 1
+df$b.boots.grwf[df$boots.grwf == "0"] <- 0
+df$b.boots.grwf[df$boots.grwf == "1"] <- NA
+df$b.boots.grwf[df$boots.grwf == "2"] <- 1
+
+df$b.boots.grwm[df$boots.grwm == "0"] <- 0
+df$b.boots.grwm[df$boots.grwm == "1"] <- NA
+df$b.boots.grwm[df$boots.grwm == "2"] <- 1
 
 par(mfrow = c(1,2))
-hist(df$boots.grwf, main = "Binomial boots.grwf")
-hist(df$boots.grwm, main = "Binomial boots.grwm")
+hist(df$b.boots.grwf, main = "Binomial boots.grwf")
+hist(df$b.boots.grwm, main = "Binomial boots.grwm")
 dev.off()
 
 df$pair[df$boots.grwm == "0" & df$boots.grwf == "0"] <- 0
@@ -205,8 +220,6 @@ for (i in 1:length(df$response.ccf)) {
     }
 
 }
-
-
 ```
 
 ```{r subseting and removing NAs}
@@ -226,8 +239,8 @@ df <- df[!is.na(df$parasite),]
 df <- df[!is.na(df$nestday),]
 df <- df[!is.na(df$mminutes),]
 df <- df[!is.na(df$site),]
-#df <- df[!is.na(df$boots.grwf),]
-#df <- df[!is.na(df$boots.grwm),]
+df <- df[!is.na(df$boots.grwf),]
+df <- df[!is.na(df$boots.grwm),]
 #df <- df[!is.na(df$pair),]
 
 df <- subset(df, mminutes >= 360
@@ -411,11 +424,11 @@ summary(m2.6)
 
 ```{r}
 
-as.factor(df$playback.grwf)
-as.factor(df$playback.grwm)
-df.exp1 <- df[!is.na(df$playback.grwf),]
+df$boots.grwf <- as.factor(df$boots.grwf)
+df$boots.grwm <- as.factor(df$boots.grwm)
+df.exp1 <- df[!is.na(df$boots.grwf),]
 
-m3.1 <- clmm(playback.grwf ~ total.eggs
+m3.1 <- clmm(boots.grwf ~ total.eggs
              + parasite
              + scale(mminutes)
              + scale(nestday)
