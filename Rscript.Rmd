@@ -7,10 +7,12 @@ output: html_document
 
 Files:
 
-DFx2b.csv contains  (1) great reed warbler (Acrocephalus arundinaceus, GRW from hereafter) nest checking data from 2013, 2014 and 2018, 
-                    (2) great reed warbler nest characteristics from 2018
-                    (3) male and female great reed warbler alarm call intensity data to observer and to dummy plastic cuckoo from 2018
-                    (4) male and female common cuckoo (Cuculus canorus CC from hereafter) reactions to GRW alarm call from 2018. All experiment were performed near Apaj village, central Hungary.
+DFx2b.csv contains:
+
+(1) great reed warbler (Acrocephalus arundinaceus, GRW from hereafter) nest checking data from 2013, 2014 and 2018, 
+(2) great reed warbler nest characteristics from 2018
+(3) male and female great reed warbler alarm call intensity data to observer and to dummy plastic cuckoo from 2018
+(4) male and female common cuckoo (Cuculus canorus CC from hereafter) reactions to GRW alarm call from 2018. All experiment were performed near Apaj village, central Hungary.
                     
 - Columns:
 -- nestid: a concatenated id showing the number of given nest in given year and the year
@@ -211,18 +213,26 @@ for (i in 1:length(df$response.ccf)) {
 
 # creating a full df
 df.full <- df
+
+# retrieving full df
 df <- df.full
 
-# removing NAs and subseting to nest visitis between 6 AM and 12 PM
-#df <- df[!is.na(df$parasite),]
-#df <- df[!is.na(df$nestday),]
-#df <- df[!is.na(df$mminutes),]
-#df <- df[!is.na(df$site),]
+#df <- subset(df, nestday > 0) # removing negative nestday values
+df <- subset(df, pull != 1 ) # removing nests with pull
+df <- subset(df, abandoned != 1) # removing abandoned nests
+
+# removing NAs
+df <- df[!is.na(df$parasite),]
+df <- df[!is.na(df$nestday),]
+df <- df[!is.na(df$mminutes),]
+df <- df[!is.na(df$site),]
 #df <- df[!is.na(df$boots.grwf),]
 #df <- df[!is.na(df$boots.grwm),]
 #df <- df[!is.na(df$pair),]
 
-df <- subset(df, mminutes >= 360 & mminutes <= 720 | mminutes >= 1000 )
+df <- subset(df, mminutes >= 360
+             & mminutes <= 720
+             | mminutes >= 1000 )
 
 # Time conversions:
 # 360 = 06:00
@@ -233,16 +243,14 @@ df <- subset(df, mminutes >= 360 & mminutes <= 720 | mminutes >= 1000 )
 # 1080 = 18:00
 # 1140 = 19:00
 
-#df <- df[df$observer != "ZA",]
+df <- df[df$observer != "ZA",]
 #df <- df[df$year != "2014",]
 
-#df <- subset(df, nestday > 0) # removing negative nestday values
-df <- subset(df, pull = 1 ) # removing nests with pull
-df <- subset(df, abandoned = 1) # removing abandoned nests
 
 ```
 
 ```{r exploratory analyses on df}
+# head, sumamry and str of df
 
 head(df)
 summary(df)
@@ -251,12 +259,11 @@ str(df)
 ```
 
 ```{r repeatability of alarm call}
-
 # repeatability with one grouping level
 
 df$multiple <- 1
 n <- summaryBy(multiple ~ nestid, data = df, FUN = c(sum))
-m <- n$nestid[n$multiple.sum > 1]
+m <- n$nestid[n$multiple.sum > 1] # selects only the nests with at least 2 visits
 
 df.rep <- df[df$nestid %in% m,]
 df.rep <- df[!is.na(df$boots.grwf),]
@@ -274,34 +281,37 @@ beep(4)
 pair.rpt
 
 # number of df.rep nests, mean and sd
-
 sumvisit <- summaryBy(multiple ~ nestid, data = df.rep, FUN = c(sum))
 length(unique(df.rep$nestid))
 mean(sumvisit$multiple.sum)
 sd(sumvisit$multiple.sum)
 
-# percentage of nests with at least two visits
+hist(sumvisit$multiple.sum,
+     main = "Histogram of number of visits")
 
+# percentage of nests with at least two visits
 (length(unique(df.rep$nestid))*100)/length(unique(df$nestid))
 
 ```
 
-```{r cor.test between boots.grw and playback.grw}
+```{r cor.test between boots.grw and playback.grw, eval=FALSE, include=FALSE}
 
 df.cor <- df[!is.na(df$playback.grwf),]
 
-cor.test(df.cor$boots.grwf, df.cor$playback.grwf, method = "spearman")
+cor.test(df.cor$boots.grwf, df.cor$playback.grwf,
+         method = "spearman")
 
 ```
 
 
 ```{r GRW alarm call probability to observers correlates to clutch size}
 
+# RESULT: boots.grwf ~ total.eggs***
+
 m1.1 <- glmer(boots.grwf ~ total.eggs
                + scale(mminutes)
                + scale(nestday)
                + scale(j.date)
-               + scale(laying.date)
                + parasite
                + (1|nestid)
                + (1|observer)
@@ -325,12 +335,40 @@ m1.4 <- update(m1.3, .~. - scale(mminutes))
 summary(m1.4)
 drop1(m1.4, test = "Chisq")
 
-m1.5 <- update(m1.4, .~. - scale(laying.date))
+m1.5 <- update(m1.4, .~. - scale(j.date))
 summary(m1.5)
-drop1(m1.5, test = "Chisq")
 
-m1.6 <- update(m1.5, .~. - scale(j.date))
-summary(m1.6)
+
+# testing the potential effect of random factors
+m1.5.r1 <- update(m1.5, .~. - (1|nestid))
+anova(m1.5, m1.5.r1)
+m1.5.r2 <- update(m1.5, .~. - (1|observer))
+anova(m1.5, m1.5.r2)
+m1.5.r3 <- update(m1.5, .~. - (1|site))
+anova(m1.5, m1.5.r3)
+
+#plot from Attila Fulop
+#plot female
+fe <- fixef(m1.5)
+ilogit <- function(x) {1/(1+exp(-x))}
+
+new.te.f <- seq(min(df$total.eggs), max(df$total.eggs), 0.01)
+real.te.f <- new.te.f * sd(df$total.eggs) + mean(df$total.eggs)
+
+te <- fe["(Intercept)"] + fe["total.eggs"] * new.te.f
+
+par(mar=c(5, 5, 2, 2))
+plot(boots.grwf ~ total.eggs, data=df,
+     #type = 'n',
+     cex=1.5, pch=1, col="darkblue", 
+     xlim=c(0, 12),
+     xlab="Clutch size", 
+     ylab="Probability of female alarm call", 
+     cex.lab=1)
+lines(real.te.f, ilogit(te), lty=1, lwd=3, col="darkblue")
+
+
+#legend(x = 1, y = 0.3, c("non-parasitized", "parasitized"), pch=c(1, 4), col=c("darkblue", "darkred"), pt.cex=1, cex=1, bty="n", ncol=1)
 
 ```
 
@@ -397,6 +435,31 @@ drop1(m1.1, test = "Chisq")
 
 ```
 
+```{r}
+
+m4 <- glmer(parasite ~ boots.grwf
+          + total.eggs
+          + scale(j.date)
+          + scale(mminutes)
+          + scale(nestday)
+          + (1|site)
+          + (1|observer)
+          + (1|nestid),
+          data = df, family = "binomial",
+          control = glmerControl(optimizer = "bobyqa",
+                                 optCtrl = list(maxfun = 2e5)),
+          na.action = na.omit)
+
+summary(m4)
+drop1(m4, test = "Chisq")
+
+m4 <- update(m4, .~. - scale(mminutes) 
+                     - boots.grwf 
+                     - scale(j.date))
+summary(m4)
+drop1(m4, test = "Chisq")
+
+```
 
 
 
