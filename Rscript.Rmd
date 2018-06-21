@@ -322,6 +322,8 @@ cor.test(df.cor$boots.grwf, df.cor$playback.grwf,
 
 ```{r glmer-b: b.boots.grwf}
 
+# test forking with data containing negative nestday
+
 m1.1 <- glmer(b.boots.grwf ~ parasite
               + total.eggs
               + parasite:total.eggs
